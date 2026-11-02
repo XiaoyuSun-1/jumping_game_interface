@@ -1,0 +1,7 @@
+node_modules/
+results/
+*.jsonl
+*.log
+.env
+.env.*
+!.env.example
