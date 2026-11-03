@@ -9,7 +9,7 @@ Run `node server.mjs`, then open http://127.0.0.1:4173. Tests: `node --test`.
 - **Experiment:** optional experiment ID, trial count, Continue current memory or Refresh network. Refresh resets all simulated networks and preserves recordings. Website trials have no gameplay time limit.
 - **Run:** Start/Pause, cancellable Run faster, New session and Step 50 ms. Manual control uses Space or a click while running. Research settings and neuron editing are collapsed. The raster shows all 32 cells; each E0–E7 pool contains four cells.
 - **Data:** session/trial performance, per-cell activity and actual beginning/end/delta connection weights. Download recording JSON for full data or filtered performance CSV for analysis. Neurons have multiple incoming/outgoing weights, not one weight each.
-- **Hardware:** placeholder only. Adapter modules and a proposed lab contract remain in source; the website makes no hardware requests.
+The website has three tabs: Experiment → Run → Data. Settings, activity and connection details are collapsed. Hardware modules remain in source for future use; the website makes no hardware requests.
 
 ## Model and signals
 

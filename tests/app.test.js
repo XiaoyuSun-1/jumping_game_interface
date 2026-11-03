@@ -15,14 +15,15 @@ test('simplified interface preserves sessions, recordings, neural inspection and
  const windowEvents=new Map();globalThis.window={addEventListener:(type,fn)=>windowEvents.set(type,fn)};let nextFrame;globalThis.requestAnimationFrame=fn=>{nextFrame=fn};
  let exported;URL.createObjectURL=blob=>{exported=blob;return 'blob:test'};URL.revokeObjectURL=()=>{};
  await import('../dist/app.js');
- assert.ok(!html.includes('id="export"'));assert.ok(!html.includes('id="showPredictive"'));assert.ok(!html.includes('id="clearMemory"'));assert.ok(!html.includes('research_trial_limit_s'));
+ assert.ok(!html.includes('id="export"'));assert.ok(!html.includes('id="showPredictive"'));assert.ok(!html.includes('id="clearMemory"'));assert.ok(!html.includes('research_trial_limit_s'));assert.ok(!html.includes('inputExplanation'));assert.ok(!html.includes('showHardware'));assert.ok(!/<p[^>]*>[^<]+<\/p>/.test(html),'no static explanatory paragraphs');
  node('research_initialization').value='continue';node('research_experiment_id').value='UI-test';node('research_trial_count').value='25';node('applyResearch').onclick();
+ assert.equal(node('gameView').hidden,false);assert.equal(node('experimentView').hidden,true);
  node('threshold').value='200';node('threshold').onchange();node('plasticity').checked=false;node('plasticity').onchange();
  await node('runTrials').onclick();await node('downloadRecordings').onclick();const archive=JSON.parse(await exported.text());
  const trials=archive.trials.filter(r=>r.research.experiment_id==='UI-test');assert.equal(trials.length,25,'archive must survive the 20-record memory cap');assert.ok(trials.every(r=>r.recording_complete));assert.ok(trials.every(r=>r.research.protocol.trial_limit_s===null));
  assert.ok(trials.every(r=>r.network_start.synapses.every((s,i)=>s.weight===r.network_end.synapses[i].weight)),'frozen weights remain unchanged');
- assert.equal(node('start').textContent,'Session complete');
- await node('showPerformance').onclick();assert.ok(node('researchRows').children.length>=25);assert.equal(node('recordChannels').children.length,32);assert.ok(node('recordWeights').children.length>0);
+ assert.equal(node('start').textContent,'Complete');
+ await node('viewResults').onclick();assert.equal(node('performanceView').hidden,false);assert.equal(node('gameView').hidden,true);assert.ok(node('researchRows').children.length>=25);assert.equal(node('recordChannels').children.length,32);assert.ok(node('recordWeights').children.length>0);
  node('researchTrialsCsv').onclick();const csv=await exported.text();assert.ok(csv.includes('UI-test'));assert.ok(csv.includes('"seconds"'));assert.ok(!csv.includes('distance_m'));
  node('recordNeuron').value='0';node('recordNeuron').onchange();assert.ok(node('recordWeights').children.every(row=>row.children[0].textContent===0||row.children[1].textContent===0));
  node('researchFilter').value='does-not-exist';node('researchFilter').oninput();assert.equal(node('recordChannels').children.length,0);assert.equal(node('recordWeights').children.length,0);

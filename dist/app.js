@@ -18,7 +18,7 @@ function persistRecordings(force=false){
  const dirty=e.recordings.filter(r=>r.events.length&&archivedRevisions.get(r.id)!==r.revision);
  if(!dirty.length)return;
  const snapshot=structuredClone(dirty);for(const r of snapshot)archivedRevisions.set(r.id,r.revision);
- recordingQueue=recordingQueue.then(async()=>writeRecords(await archive,snapshot)).then(()=>{archiveHealthy=true;$('recordingStatus').textContent='Recording saved in this browser.'}).catch(()=>{archiveHealthy=false;archivedRevisions.clear();$('recordingStatus').textContent='Archive save failed. Download JSON now for retained recordings.'});
+ recordingQueue=recordingQueue.then(async()=>writeRecords(await archive,snapshot)).then(()=>{archiveHealthy=true;$('recordingStatus').textContent='Saved'}).catch(()=>{archiveHealthy=false;archivedRevisions.clear();$('recordingStatus').textContent='Archive save failed. Download JSON now for retained recordings.'});
 }
 function persistMemory(force=false){
  if(!force&&performance.now()-lastSave<1000)return;lastSave=performance.now();
@@ -26,14 +26,15 @@ function persistMemory(force=false){
 }
 function download(body,type,name){const url=URL.createObjectURL(new Blob([body],{type})),a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)}
 async function loadRecords(){persistRecordings(true);await recordingQueue;return readRecords(await archive)}
-const research=createResearchUI(e,$,{download,loadRecords,startSession:setup=>{e.startResearchSession(setup);if(setup.initialization==='fresh'){memoryEnabled=true;predictorEnabled=true}syncControls();persistMemory(true);persistRecordings(true);update();draw()},busy:()=>running||training});
+const research=createResearchUI(e,$,{download,loadRecords,startSession:setup=>{e.startResearchSession(setup);if(setup.initialization==='fresh'){memoryEnabled=true;predictorEnabled=true}syncControls();persistMemory(true);persistRecordings(true);update();draw()},busy:()=>running||training,onPrepared:()=>showView('gameView')});
 function notice(text){$('notice').textContent=text;$('notice').style.display='block';clearTimeout(notice.timer);notice.timer=setTimeout(()=>$('notice').style.display='none',4000)}
-function showView(name){for(const [id,view]of [['showExperiment','experimentView'],['showGame','gameView'],['showPerformance','performanceView'],['showHardware','hardwareView']]){$(view).hidden=view!==name;$(id).setAttribute('aria-pressed',String(view===name))}if(name==='performanceView')return research.reload()}
-$('showExperiment').onclick=()=>showView('experimentView');$('showGame').onclick=()=>showView('gameView');$('showPerformance').onclick=()=>showView('performanceView');$('showHardware').onclick=()=>showView('hardwareView');
+function showView(name){for(const [id,view]of [['showExperiment','experimentView'],['showGame','gameView'],['showPerformance','performanceView']]){$(view).hidden=view!==name;$(id).setAttribute('aria-pressed',String(view===name))}if(name==='performanceView')return research.reload()}
+$('showExperiment').onclick=()=>showView('experimentView');$('showGame').onclick=()=>showView('gameView');$('showPerformance').onclick=()=>showView('performanceView');
 function setRunning(value){running=value&&!e.researchComplete;last=0;acc=0;persistMemory(true);persistRecordings(true);update()}
 $('start').onclick=()=>setRunning(!running);
 function newSession(){if(training)return;setRunning(false);e.startResearchSession({...e.researchSession.setup,initialization:'continue',trial_limit_s:null});persistRecordings(true);persistMemory(true);update();draw()}
 $('reset').onclick=newSession;
+$('viewResults').onclick=()=>showView('performanceView');
 $('step').onclick=()=>{if(training||running||e.researchComplete)return;for(let i=0;i<6;i++)e.step(1/120);persistRecordings(true);update();draw()};
 $('runTrials').onclick=async()=>{
  if(training){cancel=true;return}
@@ -66,13 +67,13 @@ const renderInspector=createInspector(e,()=>!running&&!training&&e.config.mode==
 function update(){
  research.render();renderInspector();persistRecordings();persistMemory();
  const active=running||training,complete=e.researchComplete;
- $('status').textContent=complete?'Session complete':active?'Running':e.time?'Paused':'Ready';
- $('start').textContent=running?'Pause':complete?'Session complete':e.time?'Resume':'Start session';$('start').disabled=training||complete;
- $('runTrials').textContent=training?'Pause fast run':'Run faster';$('runTrials').disabled=running||e.config.mode!=='neural';
+ $('status').textContent=complete?'Complete':active?'Running':e.time?'Paused':'Ready';
+ $('start').textContent=running?'Pause':complete?'Complete':e.time?'Resume':'Start';$('start').disabled=training||complete;
+ $('runTrials').textContent=training?'Pause fast':'Fast';$('runTrials').disabled=running||e.config.mode!=='neural';
  $('reset').disabled=training;$('step').disabled=active||complete;$('mode').disabled=active;for(const key of [...numeric,...toggles])$(key).disabled=active;
- $('clock').textContent=e.time.toFixed(2)+' s';$('clears').textContent=e.clears;$('jumps').textContent=e.jumps;$('sensoryRate').textContent=e.phase==='play'?(e.config.sensory?e.modelRate:0).toFixed(1)+' Hz':'Gated during feedback';
- const proximity=e.phase==='play'&&e.config.sensory?(e.latestStim?.payload.normalized_intensity??0):0;$('proximity').value=proximity;$('proximityValue').textContent=proximity.toFixed(2);$('bodyInput').textContent=e.phase==='play'?'E1 body input: '+(e.y>0?'airborne':'grounded')+' · '+(e.config.sensory?e.modelProprio:0)+' Hz':'Normal sensory input is gated during feedback.';
- $('phaseStatus').textContent=e.phase==='play'?(e.config.mode==='manual'?'Space or click the game to jump.':'Spikes from E2–E5 control jumps.'):(e.phase==='clear_feedback'?'Clear feedback':e.phase==='miss_feedback'?'Random sensory feedback':complete?'Session complete':'Trial ended')+(e.phaseRemaining>0?' · '+e.phaseRemaining.toFixed(2)+' s remaining':'');
+ $('clock').textContent=e.time.toFixed(2)+' s';$('clears').textContent=e.clears;$('jumps').textContent=e.jumps;$('sensoryRate').textContent=e.phase==='play'?(e.config.sensory?e.modelRate:0).toFixed(1)+' Hz':'—';
+ const proximity=e.phase==='play'&&e.config.sensory?(e.latestStim?.payload.normalized_intensity??0):0;$('proximity').value=proximity;$('proximityValue').textContent=proximity.toFixed(2);
+ $('phaseStatus').textContent=e.phase==='play'?'':(e.phase==='clear_feedback'?'Clear':e.phase==='miss_feedback'?'Miss':complete?'Complete':'Ended')+(e.phaseRemaining>0?' · '+e.phaseRemaining.toFixed(1)+' s':'');
 }
 function draw(){
  const ground=245;ctx.clearRect(0,0,1000,300);ctx.fillStyle='#fff';ctx.fillRect(0,0,1000,300);ctx.strokeStyle='#aaa';ctx.beginPath();ctx.moveTo(0,ground);ctx.lineTo(1000,ground);ctx.stroke();ctx.fillStyle='#222';
