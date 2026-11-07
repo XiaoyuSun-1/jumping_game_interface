@@ -45,7 +45,7 @@ test('neural rates use actual partial bins, including terminal bins after game e
  assert.equal(summary.kind,'cells');assert.equal(summary.duration_ms,75);
  assert.deepEqual(summary.channels,[{id:0,spikes:3,rate_hz:40},{id:1,spikes:3,rate_hz:40}]);
  const engine=new Engine({plasticity:false});engine.step(.033);engine.finishTrial('stopped');
- const real=neuralSummary(engine.exportRecordings()[0]);assert.equal(real.duration_ms,33);assert.equal(real.channels.length,32);
+ const real=neuralSummary(engine.exportRecordings()[0]);assert.equal(real.duration_ms,33);assert.equal(real.channels.length,6);
 });
 
 test('external recordings expose electrode counts without inventing per-cell observations',()=>{

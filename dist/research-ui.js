@@ -35,11 +35,16 @@ export function createResearchUI(e,$,{download,loadRecords,startSession,busy,onP
   const r=selected();if(!r){$('recordInfo').textContent='—';for(const id of ['recordWeights','recordChannels','recordBins'])$(id).replaceChildren();$('recordChannel').replaceChildren();return}
   const summary=neuralSummary(r),game=r.result??r.game_current;
   $('recordInfo').textContent=`Trial ${r.research?.session_trial_index??r.trial} · ${game?.outcome??'open'} · ${r.recording_complete?'Complete':'Partial'} · ${(summary.duration_ms/1000).toFixed(2)} s${r.skipped_phase?' · Interrupted':''}. ${summary.warnings.join(' ')}`;
+  const neuron=$('recordNeuron'),previousNeuron=neuron.value;neuron.replaceChildren();
+  const ids=r.network_start?.neurons?.map(n=>n.id)??[];
+  for(const id of ['all',...ids]){const option=document.createElement('option');option.value=String(id);option.textContent=id==='all'?'All neurons':'N'+id;neuron.append(option)}
+  neuron.value=ids.some(id=>String(id)===previousNeuron)?previousNeuron:'all';
+  if(r.training?.pair)$('recordInfo').textContent+=` Training N${r.training.pair[0]} + N${r.training.pair[1]}: ${r.training.delivered?'delivered':'interrupted'}.`;
   table('recordChannels',summary.channels,['id','spikes','rate_hz']);
   const channel=$('recordChannel'),old=channel.value;channel.replaceChildren();for(const cell of summary.channels){const option=document.createElement('option');option.value=String(cell.id);option.textContent=(summary.kind==='cells'?'N':'E')+cell.id;channel.append(option)}channel.value=summary.channels.some(c=>String(c.id)===old)?old:String(summary.channels[0]?.id??'');
   renderWeights();renderBins();
  }
- const neuron=$('recordNeuron');for(const id of ['all',...Array.from({length:32},(_,i)=>i)]){const option=document.createElement('option');option.value=String(id);option.textContent=id==='all'?'All neurons':'N'+id;neuron.append(option)}neuron.value='all';neuron.onchange=renderWeights;
+ $('recordNeuron').onchange=renderWeights;
  function renderData(){
   const items=filtered(),rows=researchTrialRows(items),sessions=summarizeSessions(items).reverse();
   table('sessionRows',sessions,['experiment_id','session_id','completed','incomplete','mean_seconds','mean_clears','mean_jumps','settings_changed']);

@@ -1,59 +1,57 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {Engine} from '../dist/engine.js';
-import {SpikingNetwork} from '../dist/network.js';
 import {HeadlessEngine} from '../scripts/feedback-benchmark.mjs';
+const finish=e=>{while(!e.crashed)e.step(.01)};
+const train=e=>{while(e.phase==='training')e.step(.01)};
 
-test('website defaults deliver one-second miss feedback and half-second success feedback',()=>{
- const e=new Engine();e.feedback('clear');assert.equal(e.phaseRemaining,.5);
- for(let i=0;i<50;i++)e.step(.01);assert.equal(e.phase,'play');
- const pulses=e.events.filter(p=>p.type==='pulse'&&p.payload.kind==='predictable');assert.equal(pulses.length,50);
- e.feedback('collision');assert.equal(e.phaseRemaining,1);
- for(let i=0;i<100;i++)e.step(.01);assert.equal(e.phase,'rest');assert.equal(e.phaseRemaining,0);
+test('clears do not pause play and natural trial completion starts dedicated paired training',()=>{
+ const e=new Engine({threshold:200});e.obstacles=[{id:1,x:60,w:28,h:46,cleared:false}];e.step(.01);
+ assert.equal(e.clears,1);assert.equal(e.phase,'play');assert.equal(e.events.filter(p=>p.type==='feedback').length,0);
+ e.obstacles=[{id:2,x:130,w:28,h:46,cleared:false}];finish(e);
+ assert.equal(e.phase,'training');assert.equal(e.phaseRemaining,.3);const gameTime=e.time,jumps=e.jumps;
+ train(e);assert.equal(e.time,gameTime);assert.equal(e.jumps,jumps);assert.equal(e.phase,'rest');
+ const r=e.exportRecordings().at(-1);assert.equal(r.training.delivered,true);assert.equal(r.feedback_protocol,'paired-training-v1');
+ assert.equal(r.events.filter(p=>p.type==='pulse'&&p.payload.kind==='training').length,6);
 });
-test('headless benchmark changes logging only, not neural dynamics or actions',()=>{
- const a=new Engine({seed:12,restSeconds:0,missSeconds:.1}),b=new HeadlessEngine({seed:12,restSeconds:0,missSeconds:.1});
+test('headless logging leaves neural dynamics, actions and selector unchanged',()=>{
+ const a=new Engine({seed:12}),b=new HeadlessEngine({seed:12});
  for(let i=0;i<800;i++){a.sessionStep(1/120);b.sessionStep(1/120)}
- assert.deepEqual(a.model.snapshot(),b.model.snapshot());assert.equal(a.trial,b.trial);assert.equal(a.jumps,b.jumps);assert.equal(a.clears,b.clears);
+ assert.deepEqual(a.model.snapshot(),b.model.snapshot());assert.deepEqual(a.trainer.snapshot(),b.trainer.snapshot());assert.equal(a.trial,b.trial);
 });
-test('outcome feedback schedules sensory pulses without applying a signed weight update',()=>{
- const n=new SpikingNetwork(42),before=n.synapses.map(s=>s.weight);
- n.feedback('collision',1000);assert.deepEqual(n.synapses.map(s=>s.weight),before);
- n.advance(1000,{gain:1});const pulses=n.drainPulses();
- assert.ok(pulses.length>1);assert.ok(pulses.every(p=>p.channels.length===1&&[0,1].includes(p.channels[0])));
- assert.equal(new Set(pulses.map(p=>p.channels[0])).size,2);
+test('training gates all jump requests and response bins cannot leak into the next trial',()=>{
+ const e=new Engine({threshold:200});finish(e);assert.equal(e.phase,'training');
+ e.configure({threshold:1});e.receive(Array(6).fill(100));assert.equal(e.jump(),false);assert.equal(e.jumps,0);
+ train(e);e.nextTrial();assert.equal(e.history.length,0);assert.equal(e.pending.length,0);assert.equal(e.rate,0);
+ assert.equal(e.model.previous.length,0);assert.ok(e.model.neurons.every(n=>n.v===n.rest));
 });
-test('success pattern is time-locked and synchronous on sensory pools',()=>{
- const n=new SpikingNetwork(1);n.feedback('clear',100);n.advance(100);
- const pulses=n.drainPulses();assert.equal(pulses.length,10);
- assert.ok(pulses.every(p=>p.channels.join(',')==='0,1'));
- for(let i=1;i<pulses.length;i++)assert.equal(pulses[i].network_time_ms-pulses[i-1].network_time_ms,10);
+test('manual, external, disabled training and stopped trials do not train or update selector',()=>{
+ for(const config of [{mode:'manual'},{mode:'bridge'},{feedback:false},{trainingMode:'none'}]){
+  const e=new Engine(config);finish(e);assert.equal(e.phase,'rest');assert.equal(e.model.trainingLeft,0);
+  assert.ok(e.trainer.snapshot().values.every(v=>v===1));assert.ok(!e.events.some(p=>p.type==='feedback'));
+ }
+ const e=new Engine();e.step(.1);e.finishTrial('stopped');assert.equal(e.phase,'rest');assert.equal(e.trainer.observations,0);
 });
-test('session separates miss feedback from optional rest and gates motor output',()=>{
- const e=new Engine({threshold:200,missSeconds:.2,restSeconds:.1});while(!e.crashed)e.sessionStep(.01);
- assert.equal(e.phase,'miss_feedback');const gameTime=e.time,jumps=e.jumps;
- e.configure({threshold:1});e.receive(Array(8).fill(100));assert.equal(e.jumps,jumps);
- for(let i=0;i<20;i++)e.sessionStep(.01);assert.equal(e.phase,'rest');assert.equal(e.time,gameTime);
- for(let i=0;i<10;i++)e.sessionStep(.01);assert.equal(e.trial,2);assert.equal(e.phase,'play');
- const zero=new Engine({threshold:200,missSeconds:0,restSeconds:0});while(!zero.crashed)zero.sessionStep(.01);
- zero.sessionStep(.01);assert.equal(zero.trial,2);
+test('only fully delivered patterns are credited by subsequent completed trials',()=>{
+ const e=new Engine({threshold:200});finish(e);const first=e.currentRecording;
+ assert.ok(first.training.credit.eligibility.every(v=>v===0));const selected=first.training.index;
+ train(e);e.nextTrial();finish(e);assert.equal(e.currentRecording.training.credit.eligibility[selected],1);
+ const interrupted=new Engine({threshold:200});finish(interrupted);interrupted.step(.05);const old=interrupted.currentRecording;
+ interrupted.nextTrial();assert.equal(old.training.delivered,false);assert.equal(old.skipped_phase.phase,'training');
+ finish(interrupted);assert.ok(interrupted.currentRecording.training.credit.eligibility.every(v=>v===0));
 });
-test('feedback pulses cannot contaminate the next motor decision and all phases are recorded',()=>{
- const e=new Engine({threshold:200,missSeconds:4,restSeconds:0});while(!e.crashed)e.step(.01);
- for(let i=0;i<400;i++)e.step(.01);
- assert.equal(e.rate,0);assert.equal(e.history.length,0);
- assert.ok(e.currentRecording.events.some(p=>p.type==='pulse'&&p.payload.phase==='miss_feedback'));
- assert.ok(e.currentRecording.events.some(p=>p.type==='phase'&&p.payload.phase==='rest'));
+test('final recordings include training plasticity, all spikes and selector delivery state',()=>{
+ const e=new Engine({threshold:200});finish(e);train(e);const r=e.exportRecordings().at(-1);
+ assert.equal(r.result.weight_drift_mV,r.network_end.weight_drift_mV);assert.equal(r.result.network_time_ms,r.network_end.time_ms);
+ assert.equal(r.training_state_end.eligibility[r.training.index],1);assert.equal(r.recording_complete,true);
+ const counts=Array(6).fill(0);for(const p of r.events.filter(p=>p.type==='response'))p.payload.cell_counts.forEach((n,i)=>counts[i]+=n);
+ assert.deepEqual(counts,r.network_end.neurons.map((n,i)=>n.spikes-r.network_start.neurons[i].spikes));
 });
-test('reported end-of-trial weights and clocks include feedback/rest plasticity',()=>{
- const e=new Engine({threshold:200,missSeconds:.1,restSeconds:.1});while(!e.crashed)e.step(.05);
- for(let i=0;i<4;i++)e.step(.05);
- const r=e.exportRecordings().at(-1);
- assert.equal(r.result.weight_drift_mV,r.network_end.weight_drift_mV);
- assert.equal(r.result.network_time_ms,r.network_end.time_ms);
- assert.equal(e.trials.at(-1).weight_drift_mV,r.network_end.weight_drift_mV);
-});
-test('all jump requests are blocked during predictable feedback, including manual ones',()=>{
- const e=new Engine({mode:'manual'});e.feedback('clear');assert.equal(e.crashed,false);assert.equal(e.jump(),false);
- for(let i=0;i<50;i++)e.step(.01);assert.equal(e.phase,'play');assert.equal(e.jump(),true);
+
+test('surviving a configured evaluation horizon credits prior training but does not perturb a successful network',()=>{
+ const e=new Engine();e.startResearchSession({trial_count:1,trial_limit_s:1});e.trainer.delivered(0);
+ for(let i=0;i<110;i++)e.sessionStep(.01);
+ assert.equal(e.researchComplete,true);assert.equal(e.currentRecording.result.outcome,'time limit');
+ assert.equal(e.currentRecording.training.reason,'evaluation horizon reached');assert.equal(e.currentRecording.training.pair,undefined);
+ assert.equal(e.trainer.observations,1);assert.ok(!e.events.some(p=>p.type==='feedback'));
 });

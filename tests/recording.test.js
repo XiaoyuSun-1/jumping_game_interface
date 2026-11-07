@@ -5,10 +5,10 @@ test('trial recording contains per-cell neural bins, settings, results and weigh
  const e=new Engine({threshold:200});while(!e.crashed)e.sessionStep(1/120);
  const record=e.export().recordings.at(-1);
  assert.equal(record.complete,true);assert.equal(record.result.outcome,'collision');
- assert.equal(record.network_start.neurons.length,32);assert.equal(record.network_end.neurons.length,32);
+ assert.equal(record.network_start.neurons.length,6);assert.equal(record.network_end.neurons.length,6);
  const samples=record.events.filter(p=>p.type==='response');assert.ok(samples.length>0);
- for(const p of samples){assert.equal(p.payload.cell_counts.length,32);assert.equal(p.payload.voltages_mV.length,32);
-  for(let electrode=0;electrode<8;electrode++)assert.equal(p.payload.counts[electrode],p.payload.cell_counts.slice(electrode*4,electrode*4+4).reduce((a,b)=>a+b,0));
+ for(const p of samples){assert.equal(p.payload.cell_counts.length,6);assert.equal(p.payload.voltages_mV.length,6);
+  for(let electrode=0;electrode<6;electrode++)assert.equal(p.payload.counts[electrode],p.payload.cell_counts[electrode]);
  }
  const weights=record.network_end.synapses.map(s=>s.weight);e.nextTrial();
  assert.deepEqual(e.export().recordings.at(-1).network_start.synapses.map(s=>s.weight),weights);
@@ -23,7 +23,7 @@ test('recordings survive event-ring eviction, export is detached and external co
 test('complete recordings include every generated spike even with feedback off or an interrupted trial',()=>{
  for(const feedback of [true,false]){
   const e=new Engine({feedback});for(let i=0;i<17;i++)e.step(1/120);e.finishTrial('stopped');
-  const r=e.exportRecordings().at(-1),cells=Array(32).fill(0);
+  const r=e.exportRecordings().at(-1),cells=Array(6).fill(0);
   for(const p of r.events.filter(p=>p.type==='response'))p.payload.cell_counts.forEach((n,id)=>cells[id]+=n);
   assert.deepEqual(cells,r.network_end.neurons.map((n,id)=>n.spikes-r.network_start.neurons[id].spikes));
  }
@@ -32,7 +32,7 @@ test('skipping rest or clearing memory flushes the final partial rest bin',()=>{
  for(const transition of ['nextTrial','reset']){
   const e=new Engine({threshold:200});while(!e.crashed)e.sessionStep(1/120);
   e.sessionStep(.033);const id=e.currentRecording.id;e[transition]();
-  const r=e.exportRecordings().find(r=>r.id===id),counts=Array(32).fill(0);
+  const r=e.exportRecordings().find(r=>r.id===id),counts=Array(6).fill(0);
   for(const p of r.events.filter(p=>p.type==='response'))p.payload.cell_counts.forEach((n,i)=>counts[i]+=n);
   assert.deepEqual(counts,r.network_end.neurons.map((n,i)=>n.spikes-r.network_start.neurons[i].spikes));
  }

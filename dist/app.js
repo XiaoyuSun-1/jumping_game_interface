@@ -1,15 +1,16 @@
 import {Engine} from './engine.js';
 import {openArchive,writeRecords,readRecords} from './archive.js';
-import {saveMemory,restoreMemory} from './memory.js';
-import {PredictiveObserver,savePredictor,restorePredictor} from './predictive.js';
+import {saveMemory,restoreMemory,legacyMemoryKey} from './memory.js';
+import {CELL_LABELS} from './network.js';
 import {createInspector} from './inspector.js';
 import {createResearchUI} from './research-ui.js';
 const $=id=>document.getElementById(id),e=new Engine();
 let running=false,training=false,cancel=false,last=0,acc=0,paint=0,lastSave=-Infinity;
-let memoryEnabled=true,predictorEnabled=true;
-try{restoreMemory(localStorage,e)}catch{memoryEnabled=false;$('memoryStatus').textContent='Saved network unavailable; refresh the network to replace it.'}
-try{e.predictor=restorePredictor(localStorage,e.model.seed)}catch{e.predictor=new PredictiveObserver(e.model.seed);predictorEnabled=false;$('memoryStatus').textContent='Saved observer unavailable; refresh the network to replace it.'}
-e.predictor.beginTrial(e.currentRecording,e.clock);
+let memoryEnabled=true;
+try{
+ const restored=restoreMemory(localStorage,e);
+ if(!restored&&localStorage.getItem(legacyMemoryKey))$('memoryStatus').textContent='Starting the new six-neuron model. Your old network memory and recordings are kept separately.';
+}catch{memoryEnabled=false;$('memoryStatus').textContent='Saved network unavailable; refresh the network to replace it.'}
 const archive=openArchive(globalThis.indexedDB);archive.catch(()=>{});
 let recordingQueue=Promise.resolve(),archiveHealthy=true,lastArchive=-Infinity;
 const archivedRevisions=new Map();
@@ -22,11 +23,11 @@ function persistRecordings(force=false){
 }
 function persistMemory(force=false){
  if(!force&&performance.now()-lastSave<1000)return;lastSave=performance.now();
- try{if(memoryEnabled)saveMemory(localStorage,e);if(predictorEnabled)savePredictor(localStorage,e.predictor)}catch{$('memoryStatus').textContent='Memory save failed; download recordings for backup.'}
+ try{if(memoryEnabled)saveMemory(localStorage,e);}catch{$('memoryStatus').textContent='Memory save failed; download recordings for backup.'}
 }
 function download(body,type,name){const url=URL.createObjectURL(new Blob([body],{type})),a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000)}
 async function loadRecords(){persistRecordings(true);await recordingQueue;return readRecords(await archive)}
-const research=createResearchUI(e,$,{download,loadRecords,startSession:setup=>{e.startResearchSession(setup);if(setup.initialization==='fresh'){memoryEnabled=true;predictorEnabled=true}syncControls();persistMemory(true);persistRecordings(true);update();draw()},busy:()=>running||training,onPrepared:()=>showView('gameView')});
+const research=createResearchUI(e,$,{download,loadRecords,startSession:setup=>{e.startResearchSession(setup);if(setup.initialization==='fresh'){memoryEnabled=true;$('memoryStatus').textContent=''}syncControls();persistMemory(true);persistRecordings(true);update();draw()},busy:()=>running||training,onPrepared:()=>showView('gameView')});
 function notice(text){$('notice').textContent=text;$('notice').style.display='block';clearTimeout(notice.timer);notice.timer=setTimeout(()=>$('notice').style.display='none',4000)}
 function showView(name){for(const [id,view]of [['showExperiment','experimentView'],['showGame','gameView'],['showPerformance','performanceView']]){$(view).hidden=view!==name;$(id).setAttribute('aria-pressed',String(view===name))}if(name==='performanceView')return research.reload()}
 $('showExperiment').onclick=()=>showView('experimentView');$('showGame').onclick=()=>showView('gameView');$('showPerformance').onclick=()=>showView('performanceView');
@@ -53,8 +54,9 @@ function jump(){if(e.config.mode==='manual'&&running)e.jump()}
 $('game').onclick=jump;
 window.addEventListener('keydown',event=>{if(event.code!=='Space'||['INPUT','SELECT','BUTTON','TEXTAREA'].includes(document.activeElement.tagName)||e.config.mode!=='manual')return;event.preventDefault();jump()});
 $('mode').onchange=()=>{if(running||training)return;e.startResearchSession({...e.researchSession.setup,initialization:'continue',trial_limit_s:null},{mode:$('mode').value});persistRecordings(true);update();draw()};
-const numeric=['stimulusGain','horizon','threshold','latency','learningRate'],toggles=['sensory','feedback','plasticity'];
-function syncControls(){for(const key of numeric)$(key).value=e.config[key];for(const key of toggles)$(key).checked=e.config[key];$('mode').value=e.config.mode}
+$('trainingMode').onchange=()=>{if(running||training)return;e.startResearchSession({...e.researchSession.setup,initialization:'continue'},{trainingMode:$('trainingMode').value});persistMemory(true);persistRecordings(true);update();draw()};
+const numeric=['stimulusGain','horizon','threshold','latency','learningRate'],toggles=['sensory','feedback','plasticity','difficultyRamp'];
+function syncControls(){for(const key of numeric)$(key).value=e.config[key];for(const key of toggles)$(key).checked=e.config[key];$('mode').value=e.config.mode;$('trainingMode').value=e.config.trainingMode}
 for(const key of [...numeric,...toggles])$(key).onchange=()=>{try{e.configure({[key]:toggles.includes(key)?$(key).checked:Number($(key).value)});persistMemory(true);update()}catch(err){notice(err.message);syncControls()}};
 $('downloadRecordings').onclick=async()=>{
  let saved=[],archiveAvailable=true;try{saved=await loadRecords()}catch{archiveAvailable=false}
@@ -70,22 +72,26 @@ function update(){
  $('status').textContent=complete?'Complete':active?'Running':e.time?'Paused':'Ready';
  $('start').textContent=running?'Pause':complete?'Complete':e.time?'Resume':'Start';$('start').disabled=training||complete;
  $('runTrials').textContent=training?'Pause fast':'Fast';$('runTrials').disabled=running||e.config.mode!=='neural';
- $('reset').disabled=training;$('step').disabled=active||complete;$('mode').disabled=active;for(const key of [...numeric,...toggles])$(key).disabled=active;
- $('clock').textContent=e.time.toFixed(2)+' s';$('clears').textContent=e.clears;$('jumps').textContent=e.jumps;$('sensoryRate').textContent=e.phase==='play'?(e.config.sensory?e.modelRate:0).toFixed(1)+' Hz':'—';
+ $('reset').disabled=training;$('step').disabled=active||complete;$('mode').disabled=active;$('trainingMode').disabled=active;for(const key of [...numeric,...toggles])$(key).disabled=active;
+ $('clock').textContent=e.time.toFixed(2)+' s';$('clears').textContent=e.clears;$('speedValue').textContent=(e.currentSpeed/e.config.speed).toFixed(2)+'×';$('jumps').textContent=e.jumps;$('sensoryRate').textContent=e.phase==='play'?(e.config.sensory?e.modelRate:0).toFixed(1)+' Hz':'—';
  const proximity=e.phase==='play'&&e.config.sensory?(e.latestStim?.payload.normalized_intensity??0):0;$('proximity').value=proximity;$('proximityValue').textContent=proximity.toFixed(2);
- $('phaseStatus').textContent=e.phase==='play'?'':(e.phase==='clear_feedback'?'Clear':e.phase==='miss_feedback'?'Miss':complete?'Complete':'Ended')+(e.phaseRemaining>0?' · '+e.phaseRemaining.toFixed(1)+' s':'');
+ $('phaseStatus').textContent=e.phase==='play'?'':(e.phase==='training'?'Training between trials':complete?'Complete':'Trial ended')+(e.phaseRemaining>0?' · '+e.phaseRemaining.toFixed(1)+' s':'');
 }
-function draw(){
+function draw(){drawGame();drawRaster()}
+function drawGame(){
  const ground=245;ctx.clearRect(0,0,1000,300);ctx.fillStyle='#fff';ctx.fillRect(0,0,1000,300);ctx.strokeStyle='#aaa';ctx.beginPath();ctx.moveTo(0,ground);ctx.lineTo(1000,ground);ctx.stroke();ctx.fillStyle='#222';
  for(const o of e.obstacles)ctx.fillRect(o.x,ground-o.h,o.w,o.h);
  ctx.beginPath();ctx.arc(114,ground-e.y-14,14,0,Math.PI*2);ctx.fill();
+}
+function drawRaster(){
  rctx.clearRect(0,0,1000,420);rctx.fillStyle='#fff';rctx.fillRect(0,0,1000,420);rctx.font='10px monospace';
- for(let cell=0;cell<32;cell++){const y=cell*13;rctx.fillStyle='#555';rctx.fillText('N'+cell,2,y+10);rctx.strokeStyle=cell%4===3?'#ddd':'#f4f4f4';rctx.beginPath();rctx.moveTo(32,y+12);rctx.lineTo(1000,y+12);rctx.stroke()}
- for(const p of e.currentRecording.events){if(p.type!=='response'||!p.payload.cell_counts)continue;const age=(e.model.timeMs-p.payload.network_time_ms)/1000;if(age<0||age>5)continue;const x=32+968*(1-age/5);rctx.fillStyle='#222';p.payload.cell_counts.forEach((count,cell)=>{for(let j=0;j<count;j++)rctx.fillRect(x-j*2,cell*13+3,1,6)})}
+ for(let cell=0;cell<6;cell++){const y=cell*64;rctx.fillStyle='#555';rctx.fillText('N'+cell+' '+CELL_LABELS[cell],4,y+24);rctx.strokeStyle='#e5e7eb';rctx.beginPath();rctx.moveTo(110,y+38);rctx.lineTo(1000,y+38);rctx.stroke()}
+ for(const p of e.currentRecording.events){if(p.type!=='response'||!p.payload.cell_counts)continue;const age=(e.model.timeMs-p.payload.network_time_ms)/1000;if(age<0||age>5)continue;const x=110+890*(1-age/5);rctx.fillStyle='#222';p.payload.cell_counts.forEach((count,cell)=>{for(let j=0;j<count;j++)rctx.fillRect(x-j*2,cell*64+12,2,20)})}
 }
 function frame(now){
  if(running){if(last)acc+=Math.min((now-last)/1000,.05);while(acc>=1/120&&running){const previous=e.trial;e.sessionStep(1/120);acc-=1/120;if(e.trial!==previous)persistRecordings(true);if(e.researchComplete)setRunning(false)}}
- last=now;if(now-paint>100){update();draw();paint=now}requestAnimationFrame(frame);
+ // Keep game rendering at display cadence; expensive inspection and raster updates stay at 10 Hz.
+ last=now;drawGame();if(now-paint>100){update();drawRaster();paint=now}requestAnimationFrame(frame);
 }
 document.addEventListener('visibilitychange',()=>{if(document.hidden){cancel=true;if(running)setRunning(false)}});
 window.addEventListener('pagehide',()=>{persistMemory(true);persistRecordings(true)});

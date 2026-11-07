@@ -59,3 +59,10 @@ test('recording provenance contains random-generator and engine states without a
  const state=e.model.snapshot();e.refreshRecording();assert.deepEqual(e.model.snapshot(),state);
  assert.equal(e.currentRecording.engine_state_end.phase,'play');
 });
+
+test('changing controller closes the old recording under its original mode and preserves its selector state',()=>{
+ const e=new Engine({threshold:200});e.step(.1);const old=e.currentRecording;
+ e.startResearchSession({},{mode:'bridge'});
+ assert.equal(old.game_current.mode,'neural');assert.ok(old.training_state_end);assert.equal(old.recording_complete,true);
+ assert.equal(e.currentRecording.mode,'bridge');assert.equal(e.currentRecording.training_state_start,null);
+});
