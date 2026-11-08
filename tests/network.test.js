@@ -2,12 +2,12 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {SpikingNetwork} from '../dist/network.js';
 
-test('six seeded cells have explicit input, motor and training roles and simple wiring',()=>{
+test('eight seeded cells have explicit input, motor and training roles and simple wiring',()=>{
  const a=new SpikingNetwork(42),b=new SpikingNetwork(42);
- assert.deepEqual(a.snapshot(),b.snapshot());assert.equal(a.neurons.length,6);
- assert.deepEqual(a.neurons.map(n=>n.role),['sensory','motor','training','training','training','training']);
+ assert.deepEqual(a.snapshot(),b.snapshot());assert.equal(a.neurons.length,8);
+ assert.deepEqual(a.neurons.map(n=>n.role),['sensory','motor','training','training','training','training','training','training']);
  assert.equal(new Set(a.neurons.map(n=>n.tauMs)).size,1);
- assert.ok(a.synapses[0].weight>=3&&a.synapses[0].weight<4);assert.equal(a.synapses.length,5);assert.equal(a.synapses.filter(s=>s.plastic).length,1);
+ assert.ok(a.synapses[0].weight>=3&&a.synapses[0].weight<4);assert.equal(a.synapses.length,19);assert.equal(a.synapses.filter(s=>s.plastic).length,13);
 });
 test('LIF voltage leaks toward rest without input and has no spontaneous noise',()=>{
  const n=new SpikingNetwork(2);n.neurons.forEach(c=>{c.v=-56});n.advance(20,{gain:0});
@@ -22,7 +22,7 @@ test('counts are actual single-cell spikes and reproduce across time chunks',()=
  const a=new SpikingNetwork(12),b=new SpikingNetwork(12);
  a.advance(1000,{rateHz:100});for(let i=0;i<100;i++)b.advance(10,{rateHz:100});
  assert.deepEqual(a.snapshot(),b.snapshot());const counts=a.drainCounts();
- assert.deepEqual(counts,a.neurons.map(n=>n.spikes));assert.deepEqual(a.drainCounts(),Array(6).fill(0));assert.ok(counts[1]>0);
+ assert.deepEqual(counts,a.neurons.map(n=>n.spikes));assert.deepEqual(a.drainCounts(),Array(8).fill(0));assert.ok(counts[1]>0);
 });
 test('paired training uses only dedicated cells, suppresses sensory pulses and changes only plastic synapses',()=>{
  const n=new SpikingNetwork(42),before=n.synapses.map(s=>s.weight);

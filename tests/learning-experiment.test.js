@@ -9,6 +9,6 @@ test('no-training control preserves weights and scores on identical evaluation c
 test('adaptive experiments are deterministic and evaluations cannot change learned weights',()=>{
  const options={seed:12,mode:'adaptive',trials:4,evaluationTrials:2,maxSeconds:5};
  const a=experiment.runCondition(options),b=experiment.runCondition(options);
- assert.deepEqual(a,b);assert.ok(a.training.pattern_counts.reduce((x,y)=>x+y,0)===4);assert.equal(a.after.weights_changed,false);
+ assert.deepEqual(a,b);assert.equal(a.training.completed_trials,4);const collisions=a.training.pattern_counts.reduce((x,y)=>x+y,0);assert.ok(collisions>0&&collisions<=4,'reward can allow later trials to reach the cap without collision training');assert.equal(a.after.weights_changed,false);
  assert.throws(()=>experiment.runCondition({...options,trials:0}));
 });

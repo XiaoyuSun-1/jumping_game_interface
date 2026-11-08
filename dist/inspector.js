@@ -8,6 +8,21 @@ function tableRow(values,heading=false){
 export function createInspector(engine,canEdit,onChange){
  let model=null,lastPaint=-Infinity;
  for(const n of engine.model.neurons){const option=document.createElement('option');option.value=n.id;option.textContent=`N${n.id} · ${n.label} · ${n.role}`;$('neuronSelect').append(option)}
+ for(const id of ['connectionFrom','connectionTo'])for(const n of engine.model.neurons){const option=document.createElement('option');option.value=n.id;option.textContent='N'+n.id;$(id).append(option)}
+ $('connectionFrom').value='2';$('connectionTo').value='4';
+ function editConnection(action){
+  if(!canEdit()){$('connectionStatus').textContent='Pause first';return}
+  try{
+   const from=Number($('connectionFrom').value),to=Number($('connectionTo').value);
+   if(action==='add'){
+    if(!String($('connectionWeight').value).trim())throw Error('Enter a weight');
+    engine.model.addConnection(from,to,Number($('connectionWeight').value),$('connectionPlastic').checked);
+   }else engine.model.removeConnection(from,to);
+   engine.emit('settings',{connection:{action,from,to,weight:action==='add'?Number($('connectionWeight').value):null,plastic:action==='add'?$('connectionPlastic').checked:null},origin:'user'});
+   $('connectionStatus').textContent=action==='add'?'Added':'Removed';onChange();render(true);
+  }catch(err){$('connectionStatus').textContent=err.message}
+ }
+ $('addConnection').onclick=()=>editConnection('add');$('removeConnection').onclick=()=>editConnection('remove');
  const fields={cellThreshold:'threshold',cellTau:'tauMs',cellRefractory:'refractoryMs',cellBias:'bias'};
  function fill(){
   const n=engine.model.neurons[Number($('neuronSelect').value)||0];
@@ -30,14 +45,12 @@ export function createInspector(engine,canEdit,onChange){
   $('networkPanel').hidden=engine.config.mode==='bridge';
   $('trialNumber').textContent=engine.currentRecording.research?.session_trial_index??engine.trial;
   $('learningState').textContent=engine.config.mode!=='neural'?'Manual':engine.config.plasticity?(network.weightUpdates?network.weightUpdates+' updates':'Plasticity on'):'Frozen';
-  $('cellEditor').disabled=!canEdit();
+  $('cellEditor').disabled=!canEdit();$('connectionEditor').disabled=!canEdit();
   if(model!==network){model=network;fill();$('editStatus').textContent='';force=true}
   if(!force&&performance.now()-lastPaint<250)return;lastPaint=performance.now();
-  const selectedPattern=engine.currentRecording.training;
-  $('trainingStatus').textContent=engine.config.mode==='manual'?'Manual control · training is off.':!engine.config.feedback||engine.config.trainingMode==='none'?'Training is off.':engine.phase==='training'?`Training N${selectedPattern.pair[0]} + N${selectedPattern.pair[1]} · ${(engine.phaseRemaining).toFixed(2)} s left`:selectedPattern?.reason==='evaluation horizon reached'?'Trial limit reached. No training was delivered.':selectedPattern?.delivered?`Pattern N${selectedPattern.pair[0]} + N${selectedPattern.pair[1]} delivered. The next trial provides feedback.`:'Play first. A training pattern is selected after a collision.';
   const patterns=$('patternRows');patterns.replaceChildren();
   const values=engine.trainer.values,total=values.reduce((a,b)=>a+b,0);
-  TRAINING_PAIRS.forEach((pair,i)=>patterns.append(tableRow([pair.map(id=>'N'+id).join(' + '),values[i].toFixed(2),!engine.config.feedback||engine.config.trainingMode==='none'?'off':((engine.config.trainingMode==='random'?1/6:values[i]/total)*100).toFixed(1)+'%'])));
+  TRAINING_PAIRS.forEach((pair,i)=>patterns.append(tableRow([pair.map(id=>'N'+id).join(' + '),values[i].toFixed(2),!engine.config.feedback||engine.config.trainingMode==='none'?'off':((engine.config.trainingMode==='random'?1/TRAINING_PAIRS.length:values[i]/total)*100).toFixed(1)+'%'])));
   const state=network.snapshot();
   $('weightDrift').textContent=state.weight_drift_mV.toFixed(4);
   const history=$('trialRows');history.replaceChildren();
@@ -54,7 +67,7 @@ export function createInspector(engine,canEdit,onChange){
   ]));
   const selected=Number($('neuronSelect').value)||0,weights=$('weightRows');weights.replaceChildren();
   for(const s of network.synapses.filter(s=>s.from===selected||s.to===selected))weights.append(tableRow([
-   `N${s.from} → N${s.to}`,s.weight.toFixed(5),s.initial.toFixed(5),(s.weight-s.initial).toFixed(5),s.plastic?'training-only STDP':'fixed'
+   `N${s.from} → N${s.to}`,s.weight.toFixed(5),s.initial.toFixed(5),(s.weight-s.initial).toFixed(5),s.plastic?'learns':'fixed'
   ]));
   $('selectedVoltage').textContent=`N${selected}: ${network.neurons[selected].v.toFixed(2)} mV · ${network.neurons[selected].spikes} spikes total`;
  }

@@ -2,6 +2,9 @@ import {parseArgs} from 'node:util';
 import {resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {writeFile} from 'node:fs/promises';
+import {PROTOCOL_VERSION} from '../dist/engine.js';
+import {TRAINING_PAIRS} from '../dist/training.js';
+import {MODEL_VERSION} from '../dist/network.js';
 import {HeadlessEngine as Engine} from './feedback-benchmark.mjs';
 
 const mean=xs=>xs.reduce((a,b)=>a+b,0)/xs.length;
@@ -25,8 +28,8 @@ export function runCondition({seed=42,mode='adaptive',trials=200,evaluationTrial
   !Number.isInteger(trials)||trials<1||trials>500||!Number.isInteger(evaluationTrials)||evaluationTrials<1||evaluationTrials>500||
   !Number.isFinite(maxSeconds)||maxSeconds<1||maxSeconds>600)throw Error('Invalid experiment options');
  const e=new Engine({seed,trainingMode:mode,difficultyRamp}),initial=e.model.synapses.map(s=>s.weight);
- const before=evaluate(seed,initial,evaluationTrials,maxSeconds,difficultyRamp),patterns=Array(6).fill(0);
- const emit=e.emit.bind(e);e.emit=(type,payload)=>{if(type==='feedback')patterns[payload.index]++;return emit(type,payload)};
+ const before=evaluate(seed,initial,evaluationTrials,maxSeconds,difficultyRamp),patterns=Array(TRAINING_PAIRS.length).fill(0);
+ const emit=e.emit.bind(e);e.emit=(type,payload)=>{if(type==='feedback'&&Number.isInteger(payload.index))patterns[payload.index]++;return emit(type,payload)};
  const rows=run(e,trials,maxSeconds),weights=e.model.synapses.map(s=>s.weight);
  const after=evaluate(seed,weights,evaluationTrials,maxSeconds,difficultyRamp);
  return {seed,mode,difficultyRamp,weight_before:initial[0],weight_after:weights[0],before,after,
@@ -46,7 +49,7 @@ if(resolve(process.argv[1]||'')===fileURLToPath(import.meta.url)){
   before_seconds:mean(rows.map(r=>r.before.mean_seconds)),after_seconds:mean(rows.map(r=>r.after.mean_seconds)),
   improvement_seconds:mean(rows.map(r=>r.improvement_seconds)),improved_seeds:rows.filter(r=>r.improvement_seconds>1e-8).length,
   before_clears:mean(rows.map(r=>r.before.mean_clears)),after_clears:mean(rows.map(r=>r.after.mean_clears))}});
- await writeFile(values.output,JSON.stringify({model:'simple-lif-v1',protocol:'paired-training-v1',seeds,trials,evaluationTrials,maxSeconds,difficultyRamp,
+ await writeFile(values.output,JSON.stringify({model:MODEL_VERSION,protocol:PROTOCOL_VERSION,seeds,trials,evaluationTrials,maxSeconds,difficultyRamp,
   method:'Matched initial weights; fixed held-out courses before/after; learning disabled during evaluation. Survival is capped; seeds are software replicates, not biological replicates.',summary,results},null,2),{flag:'wx'});
  console.log(JSON.stringify({summary,output:values.output}));
 }

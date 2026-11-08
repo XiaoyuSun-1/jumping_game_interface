@@ -1,6 +1,7 @@
 import {Engine} from './engine.js';
 import {openArchive,writeRecords,readRecords} from './archive.js';
 import {saveMemory,restoreMemory,legacyMemoryKey} from './memory.js';
+import {drawConnections,drawPerformance,drawWeights,recentModelEvents,drawFeedback,drawWeightHistory,drawSpeed,syncWeightSelector} from './maps.js';
 import {CELL_LABELS} from './network.js';
 import {createInspector} from './inspector.js';
 import {createResearchUI} from './research-ui.js';
@@ -9,7 +10,7 @@ let running=false,training=false,cancel=false,last=0,acc=0,paint=0,lastSave=-Inf
 let memoryEnabled=true;
 try{
  const restored=restoreMemory(localStorage,e);
- if(!restored&&localStorage.getItem(legacyMemoryKey))$('memoryStatus').textContent='Starting the new six-neuron model. Your old network memory and recordings are kept separately.';
+ if(!restored&&localStorage.getItem(legacyMemoryKey))$('memoryStatus').textContent='Eight-neuron network ready. Previous data kept.';
 }catch{memoryEnabled=false;$('memoryStatus').textContent='Saved network unavailable; refresh the network to replace it.'}
 const archive=openArchive(globalThis.indexedDB);archive.catch(()=>{});
 let recordingQueue=Promise.resolve(),archiveHealthy=true,lastArchive=-Infinity;
@@ -29,11 +30,11 @@ function download(body,type,name){const url=URL.createObjectURL(new Blob([body],
 async function loadRecords(){persistRecordings(true);await recordingQueue;return readRecords(await archive)}
 const research=createResearchUI(e,$,{download,loadRecords,startSession:setup=>{e.startResearchSession(setup);if(setup.initialization==='fresh'){memoryEnabled=true;$('memoryStatus').textContent=''}syncControls();persistMemory(true);persistRecordings(true);update();draw()},busy:()=>running||training,onPrepared:()=>showView('gameView')});
 function notice(text){$('notice').textContent=text;$('notice').style.display='block';clearTimeout(notice.timer);notice.timer=setTimeout(()=>$('notice').style.display='none',4000)}
-function showView(name){for(const [id,view]of [['showExperiment','experimentView'],['showGame','gameView'],['showPerformance','performanceView']]){$(view).hidden=view!==name;$(id).setAttribute('aria-pressed',String(view===name))}if(name==='performanceView')return research.reload()}
-$('showExperiment').onclick=()=>showView('experimentView');$('showGame').onclick=()=>showView('gameView');$('showPerformance').onclick=()=>showView('performanceView');
+function showView(name){$('activeResearch').hidden=name==='performanceView';for(const [id,view]of [['showGame','gameView'],['showPerformance','performanceView']]){$(view).hidden=view!==name;$(id).setAttribute('aria-pressed',String(view===name))}if(name==='performanceView')return research.reload()}
+$('showGame').onclick=()=>showView('gameView');$('showPerformance').onclick=()=>showView('performanceView');
 function setRunning(value){running=value&&!e.researchComplete;last=0;acc=0;persistMemory(true);persistRecordings(true);update()}
 $('start').onclick=()=>setRunning(!running);
-function newSession(){if(training)return;setRunning(false);e.startResearchSession({...e.researchSession.setup,initialization:'continue',trial_limit_s:null});persistRecordings(true);persistMemory(true);update();draw()}
+function newSession(){if(training)return;setRunning(false);e.startResearchSession({...e.researchSession.setup,initialization:'continue'});persistRecordings(true);persistMemory(true);update();draw()}
 $('reset').onclick=newSession;
 $('viewResults').onclick=()=>showView('performanceView');
 $('step').onclick=()=>{if(training||running||e.researchComplete)return;for(let i=0;i<6;i++)e.step(1/120);persistRecordings(true);update();draw()};
@@ -41,7 +42,7 @@ $('runTrials').onclick=async()=>{
  if(training){cancel=true;return}
  if(e.config.mode!=='neural'){notice('Run faster is available for the spiking network.');return}
  setRunning(false);training=true;cancel=false;
- if(e.researchComplete)e.startResearchSession({...e.researchSession.setup,initialization:'continue',trial_limit_s:null});
+ if(e.researchComplete)e.startResearchSession({...e.researchSession.setup,initialization:'continue'});
  try{
   for(let i=0;!cancel&&!e.researchComplete;i++){
    const previous=e.trial;e.sessionStep(1/120);
@@ -53,11 +54,11 @@ $('runTrials').onclick=async()=>{
 function jump(){if(e.config.mode==='manual'&&running)e.jump()}
 $('game').onclick=jump;
 window.addEventListener('keydown',event=>{if(event.code!=='Space'||['INPUT','SELECT','BUTTON','TEXTAREA'].includes(document.activeElement.tagName)||e.config.mode!=='manual')return;event.preventDefault();jump()});
-$('mode').onchange=()=>{if(running||training)return;e.startResearchSession({...e.researchSession.setup,initialization:'continue',trial_limit_s:null},{mode:$('mode').value});persistRecordings(true);update();draw()};
+$('mode').onchange=()=>{if(running||training)return;e.startResearchSession({...e.researchSession.setup,initialization:'continue'},{mode:$('mode').value});persistRecordings(true);update();draw()};
 $('trainingMode').onchange=()=>{if(running||training)return;e.startResearchSession({...e.researchSession.setup,initialization:'continue'},{trainingMode:$('trainingMode').value});persistMemory(true);persistRecordings(true);update();draw()};
-const numeric=['stimulusGain','horizon','threshold','latency','learningRate'],toggles=['sensory','feedback','plasticity','difficultyRamp'];
+const numeric=['stimulusGain','horizon','threshold','latency','learningRate','speed'],toggles=['sensory','feedback','plasticity','emptyJumpPenalty','rewiring','adaptiveSpeed'];
 function syncControls(){for(const key of numeric)$(key).value=e.config[key];for(const key of toggles)$(key).checked=e.config[key];$('mode').value=e.config.mode;$('trainingMode').value=e.config.trainingMode}
-for(const key of [...numeric,...toggles])$(key).onchange=()=>{try{e.configure({[key]:toggles.includes(key)?$(key).checked:Number($(key).value)});persistMemory(true);update()}catch(err){notice(err.message);syncControls()}};
+for(const key of [...numeric,...toggles])$(key).onchange=()=>{try{if(key==='speed'){e.startResearchSession({...e.researchSession.setup,initialization:'continue'},{speed:Number($(key).value)});persistRecordings(true)}else e.configure({[key]:toggles.includes(key)?$(key).checked:Number($(key).value)});persistMemory(true);update()}catch(err){notice(err.message);syncControls()}};
 $('downloadRecordings').onclick=async()=>{
  let saved=[],archiveAvailable=true;try{saved=await loadRecords()}catch{archiveAvailable=false}
  const records=new Map(saved.map(r=>[r.id,r]));for(const r of e.exportRecordings())if(r.events.length)records.set(r.id,r);
@@ -68,14 +69,25 @@ const ctx=$('game').getContext('2d'),rctx=$('raster').getContext('2d');
 const renderInspector=createInspector(e,()=>!running&&!training&&e.config.mode==='neural',()=>{persistMemory(true);update();draw()});
 function update(){
  research.render();renderInspector();persistRecordings();persistMemory();
+ if(!$('gameView').hidden){
+  const network=e.config.mode==='bridge'?null:e.model.snapshot();
+  drawConnections($('connectivityMap'),e.connectivitySnapshot,recentModelEvents(e.recordings));
+  const completed=e.trials.filter(t=>t.research?.session_id===e.researchSession.id).map(t=>({id:t.id,research:t.research,result:t,config_start:t.config}));
+  if(!e.trialRecorded)completed.push({research:e.currentRecording.research,config_start:e.config,game_current:{time_s:e.time,clears:e.clears,rewards:e.rewards,empty_jump_punishments:e.emptyJumpPunishments,speed_px_s:e.currentSpeed}});
+  drawFeedback($('feedbackMap'),completed);drawSpeed($('speedMap'),completed);
+  const current={...e.currentRecording,network_end:network};syncWeightSelector($('weightConnection'),current);drawWeightHistory($('weightHistoryMap'),current,$('weightConnection').value);
+  drawPerformance($('performanceMap'),completed);
+  drawWeights($('weightMap'),{network_start:network?{synapses:network.initial_synapses}:null,network_end:network},'Δ weight (mV)');
+  $('activitySummary').textContent=network?`${network.neurons.length} neurons · ${network.synapses.length} connections`:e.connectivitySnapshot?`${e.connectivitySnapshot.channels.length} channels`:'Offline';
+ }
  const active=running||training,complete=e.researchComplete;
  $('status').textContent=complete?'Complete':active?'Running':e.time?'Paused':'Ready';
  $('start').textContent=running?'Pause':complete?'Complete':e.time?'Resume':'Start';$('start').disabled=training||complete;
  $('runTrials').textContent=training?'Pause fast':'Fast';$('runTrials').disabled=running||e.config.mode!=='neural';
  $('reset').disabled=training;$('step').disabled=active||complete;$('mode').disabled=active;$('trainingMode').disabled=active;for(const key of [...numeric,...toggles])$(key).disabled=active;
- $('clock').textContent=e.time.toFixed(2)+' s';$('clears').textContent=e.clears;$('speedValue').textContent=(e.currentSpeed/e.config.speed).toFixed(2)+'×';$('jumps').textContent=e.jumps;$('sensoryRate').textContent=e.phase==='play'?(e.config.sensory?e.modelRate:0).toFixed(1)+' Hz':'—';
+ $('clock').textContent=e.time.toFixed(2)+' / '+(e.researchSession.setup.trial_limit_s??'∞')+' s';$('clears').textContent=e.clears;$('speedValue').textContent=e.currentSpeed.toFixed(0)+' px/s';$('jumps').textContent=e.jumps;$('sensoryRate').textContent=e.phase==='play'?(e.config.sensory?e.modelRate:0).toFixed(1)+' Hz':'—';
  const proximity=e.phase==='play'&&e.config.sensory?(e.latestStim?.payload.normalized_intensity??0):0;$('proximity').value=proximity;$('proximityValue').textContent=proximity.toFixed(2);
- $('phaseStatus').textContent=e.phase==='play'?'':(e.phase==='training'?'Training between trials':complete?'Complete':'Trial ended')+(e.phaseRemaining>0?' · '+e.phaseRemaining.toFixed(1)+' s':'');
+ $('phaseStatus').textContent=e.phase==='play'?'':(e.phase==='reward'?'Reward':e.phase==='punishment'?'Unneeded jump':e.phase==='training'?'Collision':complete?'Complete':'Trial ended')+(e.phaseRemaining>0?' · '+e.phaseRemaining.toFixed(1)+' s':'');
 }
 function draw(){drawGame();drawRaster()}
 function drawGame(){
@@ -85,8 +97,9 @@ function drawGame(){
 }
 function drawRaster(){
  rctx.clearRect(0,0,1000,420);rctx.fillStyle='#fff';rctx.fillRect(0,0,1000,420);rctx.font='10px monospace';
- for(let cell=0;cell<6;cell++){const y=cell*64;rctx.fillStyle='#555';rctx.fillText('N'+cell+' '+CELL_LABELS[cell],4,y+24);rctx.strokeStyle='#e5e7eb';rctx.beginPath();rctx.moveTo(110,y+38);rctx.lineTo(1000,y+38);rctx.stroke()}
- for(const p of e.currentRecording.events){if(p.type!=='response'||!p.payload.cell_counts)continue;const age=(e.model.timeMs-p.payload.network_time_ms)/1000;if(age<0||age>5)continue;const x=110+890*(1-age/5);rctx.fillStyle='#222';p.payload.cell_counts.forEach((count,cell)=>{for(let j=0;j<count;j++)rctx.fillRect(x-j*2,cell*64+12,2,20)})}
+ const rowHeight=420/CELL_LABELS.length;
+ for(let cell=0;cell<CELL_LABELS.length;cell++){const y=cell*rowHeight;rctx.fillStyle='#555';rctx.fillText('N'+cell+' '+CELL_LABELS[cell],4,y+24);rctx.strokeStyle='#e5e7eb';rctx.beginPath();rctx.moveTo(110,y+38);rctx.lineTo(1000,y+38);rctx.stroke()}
+ for(const p of recentModelEvents(e.recordings)){if(p.type!=='response'||!p.payload.cell_counts)continue;const age=(e.model.timeMs-p.payload.network_time_ms)/1000;if(age<0||age>5)continue;const x=110+890*(1-age/5);rctx.fillStyle='#222';p.payload.cell_counts.forEach((count,cell)=>{for(let j=0;j<count;j++)rctx.fillRect(x-j*2,cell*rowHeight+12,2,20)})}
 }
 function frame(now){
  if(running){if(last)acc+=Math.min((now-last)/1000,.05);while(acc>=1/120&&running){const previous=e.trial;e.sessionStep(1/120);acc-=1/120;if(e.trial!==previous)persistRecordings(true);if(e.researchComplete)setRunning(false)}}
@@ -95,4 +108,5 @@ function frame(now){
 }
 document.addEventListener('visibilitychange',()=>{if(document.hidden){cancel=true;if(running)setRunning(false)}});
 window.addEventListener('pagehide',()=>{persistMemory(true);persistRecordings(true)});
+$('weightConnection').onchange=()=>drawWeightHistory($('weightHistoryMap'),{...e.currentRecording,network_end:e.config.mode==='bridge'?null:e.model.snapshot()},$('weightConnection').value);
 syncControls();update();draw();requestAnimationFrame(frame);

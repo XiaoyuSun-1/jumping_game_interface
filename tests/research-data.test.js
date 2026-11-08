@@ -16,7 +16,7 @@ test('research rows keep latest checkpoints, actual metrics and explicit missing
  const incomplete={...trial,id:'b',complete:false,result:null,game_current:{time_s:1,distance_px:150,clears:0,jumps:1},events:[{type:'settings',payload:{config:{speed:300}}}]};
  const rows=researchTrialRows([{...trial,revision:1,result:null,complete:false},trial,incomplete,{id:'legacy',trial:5,result:{time_s:3},complete:true}]);
  assert.equal(rows.length,3);
- assert.deepEqual(rows[0],{id:'a',trial:1,experiment_id:'exp-a',session_id:'session-a',condition:'baseline',preparation_id:'prep-a',source:'browser-simulator',model_version:'fixed-v1',feedback_protocol:'feedback-v1',seconds:2,distance_m:20,clears:1,jumps:2,outcome:'stopped',complete:true,settings_changed:false});
+ assert.deepEqual(rows[0],{id:'a',trial:1,experiment_id:'exp-a',session_id:'session-a',condition:'baseline',preparation_id:'prep-a',source:'browser-simulator',model_version:'fixed-v1',feedback_protocol:'feedback-v1',seconds:2,distance_m:20,speed_px_s:null,next_speed_px_s:null,rewards:null,empty_jump_punishments:null,clears:1,jumps:2,outcome:'stopped',complete:true,settings_changed:false});
  assert.equal(rows[1].complete,false);assert.equal(rows[1].outcome,'incomplete');assert.equal(rows[1].seconds,1);assert.equal(rows[1].settings_changed,true);
  assert.equal(rows[2].session_id,null);assert.equal(rows[2].experiment_id,null);assert.equal(rows[2].distance_m,null);assert.equal(rows[2].clears,null);
  assert.equal(researchTrialRows([{...trial,complete:true,result:null}])[0].complete,false);
@@ -45,7 +45,7 @@ test('neural rates use actual partial bins, including terminal bins after game e
  assert.equal(summary.kind,'cells');assert.equal(summary.duration_ms,75);
  assert.deepEqual(summary.channels,[{id:0,spikes:3,rate_hz:40},{id:1,spikes:3,rate_hz:40}]);
  const engine=new Engine({plasticity:false});engine.step(.033);engine.finishTrial('stopped');
- const real=neuralSummary(engine.exportRecordings()[0]);assert.equal(real.duration_ms,33);assert.equal(real.channels.length,6);
+ const real=neuralSummary(engine.exportRecordings()[0]);assert.equal(real.duration_ms,33);assert.equal(real.channels.length,8);
 });
 
 test('external recordings expose electrode counts without inventing per-cell observations',()=>{
@@ -57,4 +57,13 @@ test('external recordings expose electrode counts without inventing per-cell obs
 test('invalid neural bins are excluded with warnings and never diluted into rates',()=>{
  const summary=neuralSummary({...trial,events:[{type:'response',payload:{bin_ms:50,cell_counts:[1,2]}},{type:'response',payload:{bin_ms:0,cell_counts:[99,99]}},{type:'response',payload:{bin_ms:25,cell_counts:[1]}},{type:'response',payload:{bin_ms:25,cell_counts:[-1,1]}}]});
  assert.equal(summary.duration_ms,50);assert.deepEqual(summary.channels,[{id:0,spikes:1,rate_hz:20},{id:1,spikes:2,rate_hz:40}]);assert.ok(summary.warnings.length);
+});
+test('session choices isolate records and sort trials within the selected session',async()=>{
+ const {sessionChoices,recordsForSession,UNASSIGNED_SESSION}=await import('../dist/research-data.js');
+ const records=[{id:'a2',trial:2,started_at:'2026-11-07T12:00:00Z',research:{session_id:'a',experiment_id:'first',session_trial_index:2}},
+ {id:'b1',trial:1,started_at:'2026-11-07T13:00:00Z',research:{session_id:'b',experiment_id:'second',session_trial_index:1}},
+ {id:'a1',trial:1,started_at:'2026-11-07T12:00:00Z',research:{session_id:'a',session_trial_index:1}},{id:'old',started_at:'2020-01-01'}];
+ assert.deepEqual(sessionChoices(records).map(s=>s.id),['b','a',UNASSIGNED_SESSION]);
+ assert.deepEqual(recordsForSession(records,'a').map(r=>r.id),['a1','a2']);assert.deepEqual(recordsForSession(records,'b').map(r=>r.id),['b1']);assert.deepEqual(recordsForSession(records,'missing'),[]);
+ assert.equal(sessionChoices(records).find(s=>s.id==='a').trials,2);
 });

@@ -58,4 +58,26 @@ FinalSpark's [official v2 API guide](https://finalspark-np.github.io/np-docs/np_
 
 ## Current simulation and the future adapter
 
-The current simulation has six single-cell channels (N0 input, N1 jump, N2–N5 training). Its decoder uses N1 only. The legacy external wire contract still accepts eight channel counts and averages channels 2–5 for motor output; an operator must explicitly map a future single decoder signal into that contract or revise the contract before connection. The disabled Organoid option does not configure or call hardware. New simulated training pulses are never sent to an external adapter by this interface.
+The current simulation has eight single-cell channels (N0 input, N1 jump, N2–N7 training). Its decoder uses N1 only. The legacy external wire contract still accepts eight channel counts and averages channels 2–5 for motor output; an operator must explicitly map a future single decoder signal into that contract or revise the contract before connection. The disabled Organoid option does not configure or call hardware. New simulated training pulses are never sent to an external adapter by this interface.
+
+
+## Channel connectivity for the future organoid view
+
+The map now supports read-only adapter topology metadata. A future adapter integration can call `engine.updateChannelConnectivity(snapshot)` while the engine is in `bridge` mode. This method validates and replaces the snapshot atomically, records a connectivity event, and saves beginning/end channel snapshots for Data. `engine.connectivitySnapshot` drives the same map used for simulation. Changing mappings starts a new activity window, so earlier response bins cannot acquire a different channel identity.
+
+```js
+engine.updateChannelConnectivity({
+  schema: 'neurorunner.channel-connectivity.v1',
+  channels: [
+    {id: 12, label: 'Obstacle input', role: 'sensory', count_index: 0},
+    {id: 37, label: 'Jump output', role: 'motor', count_index: 2},
+    {id: 91, label: 'Training channel', role: 'training'}
+  ],
+  connections: [{from: 12, to: 37, kind: 'functional', strength: 0.8}],
+  strength_units: 'response probability'
+});
+```
+
+Channel IDs are unique nonnegative integers and need not be consecutive. Optional `count_index` maps a channel to one of the existing eight external response bins (0–7); mapped indices must be unique. Omitted mappings or missing samples display an unavailable rate. The graph can contain additional channels without mapped counts. Connection endpoints must exist; `strength` is optional and must be finite when supplied. Connection kinds are `functional`, `anatomical`, `routing` or `unknown`. Labels, roles and units are optional strings. Supplied channel-level relationships are not reinterpreted as simulated neuron synapses or plastic weights.
+
+This metadata contract is separate from the existing strict health/step schemas. The future adapter integration must explicitly deliver it; this change adds no hardware endpoint, automatic connection, probe, or stimulation request. The Organoid option remains disabled until an integration is configured.

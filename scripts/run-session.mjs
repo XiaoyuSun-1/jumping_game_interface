@@ -6,7 +6,7 @@ import {Engine} from '../dist/engine.js';
 const {values}=parseArgs({options:{trials:{type:'string',default:'10'},seed:{type:'string',default:'42'},experiment:{type:'string',default:''},output:{type:'string'},'max-seconds':{type:'string'}}});
 if(!values.output)throw Error('Specify a new output path with --output results.jsonl');
 const e=new Engine({seed:Number(values.seed)});
-e.startResearchSession({experiment_id:values.experiment,trial_count:Number(values.trials),initialization:'fresh',seed:Number(values.seed),trial_limit_s:values['max-seconds']===undefined?null:Number(values['max-seconds'])});
+e.startResearchSession({experiment_id:values.experiment,trial_count:Number(values.trials),initialization:'fresh',seed:Number(values.seed),trial_limit_s:values['max-seconds']===undefined?60:Number(values['max-seconds'])});
 // Exclusive creation protects earlier experiment data from accidental overwrite.
 const file=await open(values.output,'wx');let interrupted=false,lastWritten=null;
 const stop=()=>{interrupted=true};process.on('SIGINT',stop);process.on('SIGTERM',stop);

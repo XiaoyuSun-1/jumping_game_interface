@@ -21,7 +21,7 @@ test('legacy memory is preserved separately and cannot be applied to the replace
 test('malformed network and selector memory is rejected atomically',()=>{
  const store=storage(),e=new Engine(),before=e.model.snapshot(),trainer=e.trainer.snapshot();saveMemory(store,e);
  const valid=store.getItem(memoryKey);
- for(const mutate of [d=>d.weights[0]=null,d=>d.neurons[0].tauMs=0,d=>d.training.values[0]=-1,d=>d.training.eligibility[0]=99,d=>d.model_version='wrong',d=>d.weights[4]=1]){
+ for(const mutate of [d=>d.synapses[0].weight=null,d=>d.neurons[0].tauMs=0,d=>d.training.values[0]=-1,d=>d.training.eligibility[0]=99,d=>d.model_version='wrong',d=>d.synapses[4].to=99,d=>delete d.synapses[0].plastic]){
   const data=JSON.parse(valid);mutate(data);store.setItem(memoryKey,JSON.stringify(data));assert.throws(()=>restoreMemory(store,e));
   assert.deepEqual(e.model.snapshot(),before);assert.deepEqual(e.trainer.snapshot(),trainer);
  }

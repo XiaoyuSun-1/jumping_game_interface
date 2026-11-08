@@ -1,3 +1,4 @@
+import {weightChanges} from './maps.js';
 function latestRecords(records){
  const latest=new Map();
  for(const record of records){
@@ -24,7 +25,7 @@ export function researchTrialRows(records){
    source:record.mode==='bridge'||record.simulation===false?'external-bridge':record.simulation===true||record.mode?'browser-simulator':null,
    model_version:record.model_version??data.model_version??null,feedback_protocol:record.feedback_protocol??data.feedback_protocol??null,
    seconds:measured(data.time_s),distance_m:Number.isFinite(data.distance_px)?data.distance_px/30:null,
-   clears:measured(data.clears),jumps:measured(data.jumps),outcome:complete?data.outcome??'unknown':'incomplete',complete,settings_changed:settingsChanged(record)};
+   speed_px_s:measured(data.speed_px_s),next_speed_px_s:measured(data.next_speed_px_s),rewards:measured(data.rewards),empty_jump_punishments:measured(data.empty_jump_punishments),clears:measured(data.clears),jumps:measured(data.jumps),outcome:complete?data.outcome??'unknown':'incomplete',complete,settings_changed:settingsChanged(record)};
  });
 }
 
@@ -73,9 +74,22 @@ export function neuralSummary(record){
 }
 
 export function connectionChanges(record){
- const ending=new Map((record.network_end?.synapses??[]).map(s=>[`${s.from}:${s.to}`,s.weight]));
- return (record.network_start?.synapses??[]).map(s=>{
-  const end=ending.get(`${s.from}:${s.to}`);
-  return {from:s.from,to:s.to,beginning:s.weight,end:end??null,delta:Number.isFinite(end)?end-s.weight:null};
- });
+ const start=record.network_start?.synapses??[],end=record.network_end?.synapses;
+ if(!end)return start.map(s=>({from:s.from,to:s.to,beginning:s.weight,end:null,delta:null}));
+ return weightChanges(record);
+}
+
+export const UNASSIGNED_SESSION='__unassigned__';
+const recordSessionId=record=>assigned(record.research?.session_id)??UNASSIGNED_SESSION;
+export function sessionChoices(records){
+ const groups=new Map();
+ for(const r of latestRecords(records)){
+  const id=recordSessionId(r),date=r.research?.session_started_at??r.started_at??'';
+  if(!groups.has(id))groups.set(id,{id,experiment_id:assigned(r.research?.experiment_id),started_at:date,trials:0});
+  const g=groups.get(id);g.trials++;if(date&&(!g.started_at||date<g.started_at))g.started_at=date;
+ }
+ return [...groups.values()].sort((a,b)=>b.started_at.localeCompare(a.started_at));
+}
+export function recordsForSession(records,id){
+ return latestRecords(records).filter(r=>recordSessionId(r)===id).sort((a,b)=>(a.research?.session_trial_index??a.trial??0)-(b.research?.session_trial_index??b.trial??0)||(a.started_at??'').localeCompare(b.started_at??''));
 }

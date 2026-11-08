@@ -11,13 +11,13 @@ test('patterns are sampled reproducibly and receive credit only after delivery a
  a.observe(20);assert.deepEqual(a.snapshot().values,initial.values,'selection alone is not delivery');
  a.delivered(choice.index);const credit=a.observe(20);
  assert.equal(credit.eligibility[choice.index],1);assert.equal(a.snapshot().values[choice.index],6.7);
- assert.ok(a.choose('adaptive').probabilities[choice.index]>1/6);
+ assert.ok(a.choose('adaptive').probabilities[choice.index]>1/15);
  a.resetCredit();const values=a.snapshot().values;a.observe(1);assert.deepEqual(a.snapshot().values,values);
 });
 test('random control uses the same pair budget and null training chooses nothing',()=>{
  const t=new training.TrainingSelector(5),choice=t.choose('random');
- assert.equal(choice.pair.length,2);assert.equal(new Set(choice.pair).size,2);assert.ok(choice.pair.every(id=>id>=2&&id<=5));
- assert.ok(choice.probabilities.every(p=>p===1/6));assert.equal(t.choose('none'),null);
+ assert.equal(choice.pair.length,2);assert.equal(new Set(choice.pair).size,2);assert.ok(choice.pair.every(id=>id>=2&&id<=7));
+ assert.ok(choice.probabilities.every(p=>p===1/15));assert.equal(t.choose('none'),null);
  assert.throws(()=>t.observe(NaN));assert.throws(()=>t.delivered(99));assert.throws(()=>t.choose('unknown'));
 });
 test('selector snapshots are detached, validated and replayable',()=>{

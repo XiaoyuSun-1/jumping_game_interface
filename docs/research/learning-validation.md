@@ -1,5 +1,7 @@
 # Single-input, single-output learning experiment
 
+**Historical report:** these measurements used the earlier variable geometry / speed-ramp protocol. The current interface uses fixed geometry, constant speed, optional empty-jump punishment and a default 60-second trial cap. The results below have not been rerun for that protocol.
+
 Run date: 2026-11-07. Model `simple-lif-v1`, protocol `paired-training-v1`. This is a software experiment, not an organoid experiment.
 
 ## What changed
