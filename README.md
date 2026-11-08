@@ -23,7 +23,7 @@ Open [localhost:4173](http://127.0.0.1:4173).
 
 - Eight neurons: one input, one jump output, and six training neurons with learning connections.
 - Add or remove connections while paused. Turn on **Auto connections** for automatic rewiring.
-- A successful jump earns a 1-second reward. Collisions receive 1 second of punishment; unnecessary jumps receive 0.5 seconds. Unnecessary-jump punishment can be switched off.
+- Inspired by the Free Energy Principle, a successful jump earns a 1-second reward. Collisions receive 1 second of punishment; unnecessary jumps receive 0.5 seconds. Unnecessary-jump punishment can be switched off.
 - Fixed obstacle shape and jump height, with random obstacle spacing.
 - Optional **Adaptive speed** raises speed by 5% after a collision-free completed trial with a clear, and lowers it by 5% after a collision. Speed stays fixed within each trial.
 - Live connection maps, weight traces, weight-change heatmaps, and reward/punishment charts.
