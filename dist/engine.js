@@ -2,19 +2,25 @@ import {validateChannelConnectivity} from './channel-connectivity.js';
 import {performanceRows} from './performance.js';
 import {SpikingNetwork,MODEL_VERSION} from './network.js';
 import {TrainingSelector} from './training.js';
+import {createFinalSparkSource,FINALSPARK_BIN_MS,FINALSPARK_ORIGIN,FINALSPARK_VERSION} from './finalspark.js';
 export const PROTOCOL_VERSION='paired-training-v5';
 import {validateResearchSetup,createResearchSession,attachResearch} from './research-protocol.js';
-export const defaults={stimulusGain:1,horizon:1500,mode:'neural',speed:290,threshold:20,latency:80,gain:1,seed:42,sensory:true,feedback:true,window:100,plasticity:true,learningRate:.5,restSeconds:0,trainingSeconds:1,rewardSeconds:1,trainingMode:'adaptive',difficultyRamp:false,adaptiveSpeed:false,speedStep:.05,rewardLearningScale:.2,punishmentLearningScale:2,rewiring:false,emptyJumpPenalty:true,punishmentSeconds:.5};
+export const defaults={stimulusGain:1,horizon:1500,mode:'neural',simulationSource:'lif',speed:290,threshold:20,latency:80,gain:1,seed:42,sensory:true,feedback:true,window:100,plasticity:true,learningRate:.5,restSeconds:0,trainingSeconds:1,rewardSeconds:1,trainingMode:'adaptive',difficultyRamp:false,adaptiveSpeed:false,speedStep:.05,rewardLearningScale:.2,punishmentLearningScale:2,rewiring:false,emptyJumpPenalty:true,punishmentSeconds:.5};
 const bounds={speedStep:[.01,.25],rewardLearningScale:[0,4],punishmentLearningScale:[0,4],punishmentSeconds:[.01,2],rewardSeconds:[0,2],trainingSeconds:[0,2],restSeconds:[0,60],stimulusGain:[0,2],horizon:[400,3000],speed:[150,500],threshold:[1,200],latency:[0,1000],gain:[0,2],seed:[1,999999],window:[50,500],learningRate:[0,1]};
 export class Engine {
  constructor(config={}){this.config={...defaults,...config};this.validate(this.config);this.reset()}
  validate(c){
   for(const [k,[lo,hi]]of Object.entries(bounds))if(!Number.isFinite(c[k])||c[k]<lo||c[k]>hi)throw Error(`Invalid ${k}: expected ${lo}–${hi}`);
   if(!['manual','neural','bridge'].includes(c.mode))throw Error('Invalid mode');
+  if(!['lif','finalspark'].includes(c.simulationSource))throw Error('Invalid simulation source');
   if(!['adaptive','random','none'].includes(c.trainingMode))throw Error('Invalid training mode');
   for(const key of ['sensory','feedback','plasticity','difficultyRamp','emptyJumpPenalty','rewiring','adaptiveSpeed'])if(typeof c[key]!=='boolean')throw Error(`Invalid ${key}`);
  }
- configure(patch){const c={...this.config,...patch};this.validate(c);this.config=c;if(this.currentRecording)this.emit('settings',{config:{...c}})}
+ configure(patch){const c={...this.config,...patch};this.validate(c);if(c.simulationSource!==this.config.simulationSource||(c.simulationSource==='finalspark'&&c.mode!==this.config.mode))throw Error('Start a new session to change the simulation source');this.config=c;if(this.currentRecording)this.emit('settings',{config:{...c}})}
+ get usesFinalSpark(){return this.config.mode==='neural'&&this.config.simulationSource==='finalspark'}
+ get usesLif(){return this.config.mode!=='bridge'&&!this.usesFinalSpark}
+ get learningSimulation(){return this.config.mode==='neural'&&!this.usesFinalSpark}
+ get modelVersion(){return this.usesFinalSpark?FINALSPARK_VERSION:this.usesLif?MODEL_VERSION:null}
  random(){this.rng=(Math.imul(1664525,this.rng)+1013904223)>>>0;return this.rng/4294967296}
  reset(){if(this.currentRecording)this.settleTerminalFeedback();if(this.currentRecording&&this.time>0&&!this.trialRecorded)this.finishTrial('stopped');if(this.currentRecording)this.refreshRecording();this.recordings??=[];this.clock=0;this.nextSpeed=this.config.speed;this.rng=this.config.seed;const selectedAdapter=this.config.mode==='bridge'?structuredClone(this.researchSession?.adapter??null):null;this.researchSession=createResearchSession({...this.researchSession?.setup,initialization:'fresh',seed:this.config.seed},this.config);this.researchSession.adapter=selectedAdapter;this.model=new SpikingNetwork(this.config.seed);this.modelId=crypto.randomUUID();this.trainer=new TrainingSelector(this.config.seed);this.trial=1;this.trials=[];this.events=[];this.seq=0;this.resetGame()}
  resetGame(){
@@ -23,11 +29,13 @@ export class Engine {
   this.pending=[];this.history=[];this.rate=0;this.lastStim=-1;this.lastJump=-2;this.jumpStartClears=null;this.emptyJumps=0;this.emptyJumpPunishments=0;this.rewards=0;this.feedbackUntil=0;
   this.latestStim=null;this.latestResponse=null;this.obstacles=[{id:1,x:700+Math.round(this.random()*300),w:28,h:46,cleared:false}];this.obstacleId=1;
   this.lastWeightSampleMs=this.model.timeMs;this.modelRate=0;this.neuralRemainder=0;this.captureMs=0;this.model.drainCounts();this.model.drainCellCounts();this.trialRecorded=false;
-  this.currentRecording={id:crypto.randomUUID(),revision:0,schema:'neurorunner.trial.v2',model_instance_id:this.modelId,model_version:this.config.mode==='bridge'?null:MODEL_VERSION,feedback_protocol:this.config.mode==='neural'?PROTOCOL_VERSION:null,memory_origin:this.model.memoryOrigin??'fresh',trial:this.trial,started_at:new Date().toISOString(),mode:this.config.mode,simulation:this.config.mode!=='bridge',config_start:{...this.config},network_start:this.config.mode==='bridge'?null:this.model.snapshot(),network_end:null,complete:false,result:null,events:[],sampling:{spike_bin_ms:50,voltage_sample_ms:50,weight_sample_ms:250,note:'Per-cell values are simulated; external mode supplies electrode counts only.'}};
+  this.finalSpark=this.usesFinalSpark?createFinalSparkSource(this.config.seed,this.trial):null;
+  this.currentRecording={id:crypto.randomUUID(),revision:0,schema:'neurorunner.trial.v2',model_instance_id:this.usesFinalSpark?crypto.randomUUID():this.modelId,model_version:this.modelVersion,feedback_protocol:this.learningSimulation?PROTOCOL_VERSION:null,memory_origin:this.usesFinalSpark?null:this.model.memoryOrigin??'fresh',trial:this.trial,started_at:new Date().toISOString(),mode:this.config.mode,simulation:this.config.mode!=='bridge',config_start:{...this.config},network_start:this.usesLif?this.model.snapshot():null,network_end:null,complete:false,result:null,events:[],sampling:this.usesFinalSpark?{spike_bin_ms:FINALSPARK_BIN_MS,voltage_sample_ms:null,weight_sample_ms:null,note:'Simulated electrode counts during active play.'}:{spike_bin_ms:50,voltage_sample_ms:50,weight_sample_ms:250,note:'Per-cell values are simulated; external mode supplies electrode counts only.'}};
+  if(this.finalSpark)this.currentRecording.spike_generator={profile:this.finalSpark.profile,seed:this.finalSpark.seed};
   this.currentRecording.channel_connectivity_start=this.config.mode==='bridge'?this.connectivitySnapshot:null;
   this.currentRecording.recording_complete=false;this.currentRecording.engine_state_start=this.engineState();
   attachResearch(this.currentRecording,this.researchSession,this.config,this.model.seed);
-  this.currentRecording.training_state_start=this.config.mode==='neural'?this.trainer.snapshot():null;
+  this.currentRecording.training_state_start=this.learningSimulation?this.trainer.snapshot():null;
   this.recordings.push(this.currentRecording);if(this.recordings.length>20)this.recordings.shift();
  }
  closeRecording(){
@@ -47,14 +55,14 @@ export class Engine {
    this.emit('difficulty',{outcome,speed_px_s:this.currentSpeed,next_speed_px_s:this.nextSpeed});
   }
   this.trials.push({id:this.currentRecording.id,research:structuredClone(this.currentRecording.research),started_at:this.currentRecording.started_at,distance_px:this.distance,speed_px_s:this.currentSpeed,next_speed_px_s:this.nextSpeed,difficulty_level:this.currentSpeed/this.config.speed,trial:this.trial,mode:this.config.mode,outcome,time_s:this.time,play_time_s:this.phaseTimes.play,punishment_time_s:this.phaseTimes.punishment,clears:this.clears,jumps:this.jumps,empty_jumps:this.emptyJumps,empty_jump_punishments:this.emptyJumpPunishments,rewards:this.rewards,
-   plasticity:this.config.plasticity,feedback:this.config.feedback,config:{...this.config},network_time_ms:this.model.timeMs,model_version:this.config.mode==='bridge'?null:MODEL_VERSION,feedback_protocol:this.config.mode==='neural'?PROTOCOL_VERSION:null,
-   weight_drift_mV:this.model.snapshot().weight_drift_mV});
+   plasticity:!this.usesFinalSpark&&this.config.plasticity,feedback:!this.usesFinalSpark&&this.config.feedback,config:{...this.config},network_time_ms:this.usesFinalSpark?null:this.model.timeMs,model_version:this.modelVersion,feedback_protocol:this.learningSimulation?PROTOCOL_VERSION:null,
+   weight_drift_mV:this.usesFinalSpark?0:this.model.snapshot().weight_drift_mV});
   this.currentRecording.complete=true;this.currentRecording.result={...this.trials.at(-1),distance_px:this.distance};this.refreshRecording();
   if(this.trials.length>500)this.trials.shift();
   this.crashed=true;this.planTraining(outcome);this.refreshRecording();
  }
  emit(type,payload){
-  const packet={seq:++this.seq,trial:this.trial,t_ms:Math.round(this.time*1000),session_time_ms:Math.round(this.clock*1000),network_time_ms:this.config.mode==='bridge'?null:this.model.timeMs,type,source:this.config.mode==='bridge'?'external-bridge':'browser-simulator',payload};
+  const packet={seq:++this.seq,trial:this.trial,t_ms:Math.round(this.time*1000),session_time_ms:Math.round(this.clock*1000),network_time_ms:this.usesLif?this.model.timeMs:null,type,source:this.config.mode==='bridge'?'external-bridge':'browser-simulator',payload};
   this.currentRecording.revision++;this.currentRecording.events.push(packet);this.events.push(packet);if(this.events.length>30000)this.events.shift();return packet;
  }
  jump(source='manual'){
@@ -63,7 +71,7 @@ export class Engine {
   this.emit('action',{action:'jump',controller:source,rate_hz:+this.rate.toFixed(2),threshold_hz:this.config.threshold});return true;
  }
  get connectivitySnapshot(){
-  if(this.config.mode!=='bridge')return this.model.snapshot();
+  if(this.usesLif)return this.model.snapshot();
   const topology=this.researchSession?.adapter?.connectivity;
   return topology?{...structuredClone(topology),time_ms:this.clock*1000}:null;
  }
@@ -84,7 +92,7 @@ export class Engine {
  rewardJump(){
   if(this.config.rewardSeconds===0)return;
   this.rewards++;this.setPhase('reward',this.config.rewardSeconds);
-  const stimulated=this.config.mode==='neural'&&this.config.feedback&&this.config.trainingMode!=='none';
+  const stimulated=this.learningSimulation&&this.config.feedback&&this.config.trainingMode!=='none';
   if(stimulated)this.model.train([2,3],Math.round(this.config.rewardSeconds*1000));
   this.emit('feedback',{outcome:'reward',jump:this.jumps,pattern:stimulated?'forward paired training':'period only',channels:stimulated?[2,3]:[],duration_ms:Math.round(this.config.rewardSeconds*1000),stimulation_scheduled:stimulated,units:'software feedback only; not physical stimulation settings'});
  }
@@ -92,13 +100,13 @@ export class Engine {
   this.emptyJumps++;this.emit('outcome',{outcome:'empty jump',jump:this.jumps,punished:this.config.emptyJumpPenalty});
   if(!this.config.emptyJumpPenalty)return;
   this.emptyJumpPunishments++;this.setPhase('punishment',this.config.punishmentSeconds);
-  if(this.config.mode==='neural'&&this.config.feedback&&this.config.trainingMode!=='none'){
+  if(this.learningSimulation&&this.config.feedback&&this.config.trainingMode!=='none'){
    this.model.train([3,2],Math.round(this.config.punishmentSeconds*1000));
    this.emit('feedback',{outcome:'empty jump',pattern:'reverse paired training',channels:[3,2],duration_ms:Math.round(this.config.punishmentSeconds*1000),units:'software training only; not physical stimulation settings'});
   }
  }
  planTraining(outcome){
-  const active=this.config.mode==='neural'&&this.config.feedback&&this.config.trainingMode!=='none';
+  const active=this.learningSimulation&&this.config.feedback&&this.config.trainingMode!=='none';
   if(!active||!['collision','time limit'].includes(outcome)){
    this.trainer.resetCredit();this.setPhase(outcome==='collision'&&this.config.trainingSeconds>0?'training':'rest',outcome==='collision'&&this.config.trainingSeconds>0?this.config.trainingSeconds:this.config.restSeconds);return;
   }
@@ -120,7 +128,12 @@ export class Engine {
  }
  decode(){
   if(this.phase!=='play'||this.crashed){this.history=[];this.rate=0;return}
-  const window=this.config.window/1000;this.history=this.history.filter(r=>this.time-r.t<window-1e-8);
+  const window=(this.usesFinalSpark?FINALSPARK_BIN_MS:this.config.window)/1000;this.history=this.history.filter(r=>this.time-r.t<window-1e-8);
+  if(this.usesFinalSpark){
+   this.rate=(this.history.at(-1)?.counts.reduce((sum,count)=>sum+count,0)??0)/window;
+   if(this.rate>=this.config.threshold&&this.time-this.lastJump>.65)this.jump(FINALSPARK_ORIGIN);
+   return;
+  }
   this.rate=this.history.reduce((s,r)=>s+(this.config.mode==='bridge'?r.counts.slice(2,6).reduce((a,b)=>a+b,0)/4:r.counts[1]),0)/window;
   if(this.config.mode!=='manual'&&this.rate>=this.config.threshold&&this.time-this.lastJump>.65)this.jump(this.config.mode==='bridge'?'external spikes':'LIF motor spikes');
  }
@@ -128,9 +141,9 @@ export class Engine {
   if(!this.currentRecording)return;
   if(this.trialRecorded&&this.phase==='rest'&&this.phaseRemaining<1e-8){this.currentRecording.recording_complete=true;this.currentRecording.ended_at??=new Date().toISOString()}
   this.currentRecording.revision++;
-  this.currentRecording.game_current={trial:this.trial,mode:this.config.mode,time_s:this.time,distance_px:this.distance,speed_px_s:this.currentSpeed,target_speed_px_s:this.targetSpeed,next_speed_px_s:this.nextSpeed,clears:this.clears,jumps:this.jumps,empty_jumps:this.emptyJumps,empty_jump_punishments:this.emptyJumpPunishments,rewards:this.rewards,plasticity:this.config.plasticity,feedback:this.config.feedback,model_version:this.config.mode==='bridge'?null:MODEL_VERSION,feedback_protocol:this.config.mode==='neural'?PROTOCOL_VERSION:null,phase:this.phase,phase_remaining_s:this.phaseRemaining};
-  const network=this.currentRecording.simulation?this.model.snapshot():null;
-  this.currentRecording.training_state_end=this.config.mode==='neural'?this.trainer.snapshot():null;
+  this.currentRecording.game_current={trial:this.trial,mode:this.config.mode,time_s:this.time,distance_px:this.distance,speed_px_s:this.currentSpeed,target_speed_px_s:this.targetSpeed,next_speed_px_s:this.nextSpeed,clears:this.clears,jumps:this.jumps,empty_jumps:this.emptyJumps,empty_jump_punishments:this.emptyJumpPunishments,rewards:this.rewards,plasticity:!this.usesFinalSpark&&this.config.plasticity,feedback:!this.usesFinalSpark&&this.config.feedback,model_version:this.modelVersion,feedback_protocol:this.learningSimulation?PROTOCOL_VERSION:null,phase:this.phase,phase_remaining_s:this.phaseRemaining};
+  const network=this.usesLif?this.model.snapshot():null;
+  this.currentRecording.training_state_end=this.learningSimulation?this.trainer.snapshot():null;
   this.currentRecording.channel_connectivity_end=this.config.mode==='bridge'?this.connectivitySnapshot:null;
   this.currentRecording.network_end=network;this.currentRecording.engine_state_end=this.engineState();
   if(this.currentRecording.result){
@@ -145,6 +158,14 @@ export class Engine {
   this.lastWeightSampleMs=this.model.timeMs;this.emit('weights',{synapses:this.model.synapses.map(s=>({...s})),phase:this.phase});
  }
  neuralBin(){return {counts:this.model.drainCounts(),cell_counts:this.model.drainCellCounts(),voltages_mV:this.model.neurons.map(n=>n.v)}}
+ captureFinalSpark(dt){
+  this.captureMs+=dt*1000;
+  if(this.captureMs<FINALSPARK_BIN_MS-1e-8)return;
+  this.captureMs-=FINALSPARK_BIN_MS;
+  const counts=this.finalSpark.next();
+  this.latestResponse=this.emit('response',{counts,bin_ms:FINALSPARK_BIN_MS,units:'one count per electrode',origin:FINALSPARK_ORIGIN,phase:'play'});
+  this.history.push({t:this.time,counts});
+ }
  advanceNeurons(dt,rest=this.phase!=='play'){
   this.neuralRemainder+=dt*1000;const steps=Math.floor(this.neuralRemainder+1e-8);this.neuralRemainder-=steps;
   for(let i=0;i<steps;i++){
@@ -161,7 +182,7 @@ export class Engine {
   }
  }
  settleTerminalFeedback(){
-  if(this.config.mode==='bridge')return;
+  if(!this.usesLif)return;
   this.sampleWeights(true);
   const record=(bin,binMs,phase,networkTime=this.model.timeMs)=>{
    this.latestResponse=this.emit('response',{...bin,bin_ms:binMs,units:'one count per channel',origin:'LIF spikes',phase,network_time_ms:networkTime});
@@ -177,7 +198,7 @@ export class Engine {
   const inTrial=this.phase==='punishment'||this.phase==='reward';
   const elapsed=Math.min(dt,this.phaseRemaining,inTrial&&limit!==null?Math.max(0,limit-this.time):Infinity);
   if(inTrial)this.time+=elapsed;
-  if(elapsed>0){if(this.config.mode!=='bridge')this.advanceNeurons(elapsed,true);this.phaseTimes[this.phase]+=elapsed}
+  if(elapsed>0){if(this.usesLif)this.advanceNeurons(elapsed,true);this.phaseTimes[this.phase]+=elapsed}
   this.phaseRemaining=Math.max(0,this.phaseRemaining-dt);
   if(this.phase==='rest')this.restRemaining=this.phaseRemaining;
   if(inTrial&&limit!==null&&this.time>=limit-1e-8){this.finishTrial('time limit');return}
@@ -207,7 +228,7 @@ export class Engine {
    this.currentRecording=null;this.reset();
   }else{this.trial++;this.resetGame()}
   this.trainer.resetCredit();
-  this.currentRecording.training_state_start=this.config.mode==='neural'?this.trainer.snapshot():null;
+  this.currentRecording.training_state_start=this.learningSimulation?this.trainer.snapshot():null;
   this.researchSession=createResearchSession(setup,this.config);this.researchSession.adapter=adapter;this.currentRecording.channel_connectivity_start=this.config.mode==='bridge'?this.connectivitySnapshot:null;attachResearch(this.currentRecording,this.researchSession,this.config,this.model.seed);
  }
  sessionStep(dt){this.step(dt,true)}
@@ -217,6 +238,7 @@ export class Engine {
   if(this.researchSession.setup.trial_limit_s!==null)dt=Math.min(dt,this.researchSession.setup.trial_limit_s-this.time);
   this.currentSpeed=this.trialSpeed;
   this.phaseTimes.play+=dt;this.time+=dt;this.distance+=this.currentSpeed*dt;this.vy-=1450*dt;this.y=Math.max(0,this.y+this.vy*dt);if(this.y===0)this.vy=0;
+  if(this.usesFinalSpark)this.captureFinalSpark(dt);
   for(const o of this.obstacles){
    o.x-=this.currentSpeed*dt;
    if(!o.cleared&&o.x+o.w<96){o.cleared=true;this.clears++;this.emit('outcome',{outcome:'clear',obstacle_id:o.id,speed_px_s:this.currentSpeed});}
@@ -225,7 +247,7 @@ export class Engine {
   if(this.jumpStartClears!==null&&this.y===0&&this.vy===0){
    const empty=this.clears===this.jumpStartClears;this.jumpStartClears=null;
    if((empty&&this.config.emptyJumpPenalty)||(!empty&&this.config.rewardSeconds>0)){
-    if(this.config.mode!=='bridge')this.advanceNeurons(dt);
+    if(this.usesLif)this.advanceNeurons(dt);
     if(empty)this.punishEmptyJump();else this.rewardJump();return;
    }
    if(empty)this.punishEmptyJump();
@@ -236,7 +258,7 @@ export class Engine {
    const gap=Math.round(550+this.random()*600),obstacle={id:++this.obstacleId,x:last?last.x+last.w+gap:1000+gap,w:28,h:46,cleared:false};
    this.obstacles.push(obstacle);this.emit('obstacle',{...obstacle,gap_px:gap,speed_px_s:this.currentSpeed});
   }
-  if(this.time-this.lastStim>=.05-1e-8){
+  if(!this.usesFinalSpark&&this.time-this.lastStim>=.05-1e-8){
    this.lastStim=this.time;const intensity=Math.max(0,Math.min(1,(1-this.ttc/(this.config.horizon/1000))*this.config.stimulusGain));
    this.modelRate=0;this.modelProprio=0;
    if(this.config.sensory){
@@ -245,12 +267,12 @@ export class Engine {
      normalized_intensity:+intensity.toFixed(3),pattern:'rate-code',rate_hz:rate,units:'model pulse rate; not physical stimulation'});
    }
   }
-  if(this.config.mode!=='bridge')this.advanceNeurons(dt);
+  if(this.usesLif)this.advanceNeurons(dt);
   while(this.pending.length&&this.pending[0].due<=this.time+1e-8){const p=this.pending.shift();this.receive(p.counts,'LIF spikes',p.networkTime,p.details)}
   this.decode();
   if(this.researchSession.setup.trial_limit_s!==null&&this.time>=this.researchSession.setup.trial_limit_s-1e-8)this.finishTrial('time limit');
  }
  export(){return {schema:'neurorunner.session.v3',performance:performanceRows(this.trials),recordings:this.exportRecordings(),simulation:this.config.mode!=='bridge',config:{...this.config},
   research_session:structuredClone(this.researchSession),summary:{phase:this.phase,phase_remaining_s:this.phaseRemaining,session_time_s:this.clock,rest_remaining_s:this.restRemaining,trial:this.trial,time_s:this.time,play_time_s:this.phaseTimes.play,punishment_time_s:this.phaseTimes.punishment,clears:this.clears,jumps:this.jumps,empty_jumps:this.emptyJumps,empty_jump_punishments:this.emptyJumpPunishments,rewards:this.rewards,crashed:this.crashed},
-  training:this.config.mode==='neural'?this.trainer.snapshot():null,network:this.config.mode==='bridge'?null:this.model.snapshot(),trials:this.trials.map(t=>({...t})),events:this.events}}
+  training:this.learningSimulation?this.trainer.snapshot():null,network:this.usesLif?this.model.snapshot():null,trials:this.trials.map(t=>({...t})),events:this.events}}
 }

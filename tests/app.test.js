@@ -39,5 +39,21 @@ test('simplified interface preserves sessions, recordings, neural inspection and
  windowEvents.get('pagehide')();await import('../dist/app.js?reload');assert.ok(node('memoryStatus').textContent==='');node('step').onclick();await node('downloadRecordings').onclick();assert.equal(JSON.parse(await exported.text()).trials.at(-1).research.protocol.trial_limit_s,2,'reload must apply the saved duration shown in setup');
  // Fast execution must remain cancellable with bounded gameplay.
  node('research_initialization').value='continue';const fast=node('runTrials').onclick();node('runTrials').onclick();await fast;assert.equal(node('start').disabled,false);
+ node('simulationSource').value='finalspark';node('simulationSource').onchange();
+ assert.equal(node('mode').value,'neural');
+ assert.equal(node('simulationSourceLabel').hidden,false);
+ assert.equal(node('networkDetails').hidden,true);
+ assert.equal(node('sourceNote').hidden,false);
+ node('step').onclick();node('step').onclick();await node('downloadRecordings').onclick();
+ const finalSparkRun=JSON.parse(await exported.text()).trials.at(-1);
+ assert.equal(finalSparkRun.model_version,'finalspark-markov-100ms-v1');
+ node('researchFilter').value='';await node('viewResults').onclick();
+ node('researchSession').value=finalSparkRun.research.session_id;node('researchSession').onchange();
+ assert.match(node('recordInfo').textContent,/FinalSpark-trained simulation/);
+ node('showGame').onclick();
+ node('mode').value='manual';node('mode').onchange();
+ assert.equal(node('simulationSourceLabel').hidden,true);
+ node('mode').value='neural';node('mode').onchange();
+ node('simulationSource').value='lif';node('simulationSource').onchange();
  broken=true;await node('runTrials').onclick();assert.ok(node('recordingStatus').textContent.includes('failed'));
 });

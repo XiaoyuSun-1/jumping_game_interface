@@ -39,6 +39,7 @@ export function createResearchUI(e,$,{download,loadRecords,startSession,busy,onP
   const r=selected();drawConnections($('dataConnectivityMap'),connectivityForRecord(r),r?.events??[]);drawWeights($('dataWeightMap'),r);syncWeightSelector($('dataWeightConnection'),r);drawWeightHistory($('dataWeightHistoryMap'),r,$('dataWeightConnection').value);if(!r){$('recordInfo').textContent='—';for(const id of ['recordWeights','recordChannels','recordBins'])$(id).replaceChildren();$('recordChannel').replaceChildren();return}
   const summary=neuralSummary(r),game=r.result??r.game_current;
   $('recordInfo').textContent=`Trial ${r.research?.session_trial_index??r.trial} · ${game?.outcome??'open'} · ${r.recording_complete?'Complete':'Partial'} · ${(summary.duration_ms/1000).toFixed(2)} s${r.skipped_phase?' · Interrupted':''}. ${summary.warnings.join(' ')}`;
+  if(r.spike_generator)$('recordInfo').textContent+=' FinalSpark-trained simulation.';
   const neuron=$('recordNeuron'),previousNeuron=neuron.value;neuron.replaceChildren();
   const ids=r.network_start?.neurons?.map(n=>n.id)??[];
   for(const id of ['all',...ids]){const option=document.createElement('option');option.value=String(id);option.textContent=id==='all'?'All neurons':'N'+id;neuron.append(option)}
@@ -66,7 +67,7 @@ export function createResearchUI(e,$,{download,loadRecords,startSession,busy,onP
   table('sessionRows',sessions,['experiment_id','session_id','completed','incomplete','mean_seconds','mean_clears','mean_jumps','settings_changed']);
   table('researchRows',rows.slice(-500).reverse(),['trial','seconds','speed_px_s','clears','jumps','outcome','settings_changed']);
   $('researchDataCount').textContent=choices.length?`${rows.length} trials`:'No sessions';
-  const select=$('recordSelect'),old=select.value;select.replaceChildren();for(const r of items.slice().reverse()){const option=document.createElement('option');option.value=r.id;option.textContent=`Trial ${r.research?.session_trial_index??r.trial} · ${(r.result??r.game_current)?.outcome??'Live'}`;select.append(option)}select.value=items.some(r=>r.id===old)?old:items.at(-1)?.id??'';inspect();
+  const select=$('recordSelect'),old=select.value;select.replaceChildren();for(const r of items.slice().reverse()){const option=document.createElement('option');option.value=r.id;option.textContent=`Trial ${r.research?.session_trial_index??r.trial} · ${(r.result??r.game_current)?.outcome??'Live'}${r.spike_generator?' · FinalSpark-trained':''}`;select.append(option)}select.value=items.some(r=>r.id===old)?old:items.at(-1)?.id??'';inspect();
  }
  async function reload(){try{records=await loadRecords();$('researchDataStatus').textContent=''}catch{$('researchDataStatus').textContent='Archive unavailable; showing retained recordings.'}renderData()}
  $('researchSession').onchange=()=>{sessionId=$('researchSession').value;renderData()};
