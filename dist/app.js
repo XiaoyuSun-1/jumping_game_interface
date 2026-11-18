@@ -1,7 +1,8 @@
 import {Engine} from './engine.js';
 import {openArchive,writeRecords,readRecords} from './archive.js';
 import {saveMemory,restoreMemory,legacyMemoryKey} from './memory.js';
-import {drawConnections,drawPerformance,drawWeights,recentModelEvents,drawFeedback,drawWeightHistory,drawSpeed,syncWeightSelector} from './maps.js';
+import {drawConnections,drawElectrodeMap,drawPerformance,drawWeights,recentModelEvents,drawFeedback,drawWeightHistory,drawSpeed,syncWeightSelector} from './maps.js';
+import {FINALSPARK_ELECTRODES,finalSparkCorrelations} from './finalspark.js';
 import {CELL_LABELS} from './network.js';
 import {createInspector} from './inspector.js';
 import {createResearchUI} from './research-ui.js';
@@ -73,9 +74,16 @@ $('downloadRecordings').onclick=async()=>{
 };
 const ctx=$('game').getContext('2d'),rctx=$('raster').getContext('2d');
 const renderInspector=createInspector(e,()=>!running&&!training&&e.learningSimulation,()=>{persistMemory(true);update();draw()});
+let displayedElectrodeProfile=null;
 function update(){
  research.render();if(!e.usesFinalSpark)renderInspector();persistRecordings();persistMemory();
  $('networkDetails').hidden=e.usesFinalSpark;$('sourceNote').hidden=!e.usesFinalSpark;$('proximityControls').hidden=e.usesFinalSpark;
+ $('finalSparkNetwork').hidden=!e.usesFinalSpark;
+ if(!$('gameView').hidden&&e.usesFinalSpark&&e.finalSpark.profile!==displayedElectrodeProfile){
+  displayedElectrodeProfile=e.finalSpark.profile;
+  const matrix=finalSparkCorrelations(displayedElectrodeProfile);
+  $('finalSparkNetworkNote').textContent=drawElectrodeMap($('finalSparkNetworkMap'),matrix,FINALSPARK_ELECTRODES);
+ }
  $('simulationSourceLabel').hidden=e.config.mode!=='neural';$('rateLabel').textContent=e.usesFinalSpark?'Electrode output (Hz)':'Input (Hz)';
  if(!$('gameView').hidden&&!e.usesFinalSpark){
   const network=e.usesLif?e.model.snapshot():null;

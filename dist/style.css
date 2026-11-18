@@ -13,8 +13,9 @@ summary{display:inline-block;border:1px solid #aaa;background:#f7f7f7;padding:5p
 .chart-scroll{overflow-x:auto}
 #dataPerformanceMap{cursor:pointer}
 #trialFeedback{scroll-margin-top:16px}
-#dataPerformanceTitle,#trialFeedbackTitle,#dataConnectivityTitle{font-size:16px;margin-top:0}
+#dataPerformanceTitle,#trialFeedbackTitle,#dataConnectivityTitle,#finalSparkNetworkTitle{font-size:16px;margin-top:0}
+#dataCorrelationDetails>.chart-scroll{margin-top:12px}
 #dataWeightCharts canvas{margin-top:12px}
 @media(max-width:650px){
- #dataPerformanceMap,#trialFeedbackMap,#dataConnectivityMap{min-width:560px}
+ #dataPerformanceMap,#trialFeedbackMap,#dataConnectivityMap,#dataCoactivityMatrix,#finalSparkNetworkMap{min-width:560px}
 }

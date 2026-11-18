@@ -151,6 +151,40 @@ export function drawTrialFeedback(canvas,{seconds,events}){
  canvas.setAttribute('aria-label',`Feedback timing across ${seconds.toFixed(2)} seconds. ${rewards} reward${rewards===1?'':'s'} and ${jumps} unneeded jump${jumps===1?'':'s'}. Expand Feedback times for exact timestamps.`);
 }
 
+export function drawElectrodeMap(canvas,matrix,electrodes){
+ const c=surface(canvas),centerX=canvas.width/2,centerY=canvas.height/2;
+ const radiusX=Math.min(canvas.width*.37,canvas.height*.8),radiusY=canvas.height*.34;
+ const positions=Array.from({length:electrodes},(_,index)=>{
+  const angle=index*2*Math.PI/electrodes-Math.PI/2;
+  return [centerX+Math.cos(angle)*radiusX,centerY+Math.sin(angle)*radiusY];
+ });
+ const minimum=.25,links=[];
+ for(const [i,row] of (matrix??[]).entries()){
+  for(let j=i+1;j<electrodes;j++){
+   const value=row[j];
+   if(!Number.isFinite(value)||Math.abs(value)<minimum)continue;
+   c.strokeStyle=value>0?'#175b87':'#9a4c24';
+   c.lineWidth=1+4*Math.abs(value);
+   c.setLineDash(value<0?[6,4]:[]);
+   c.beginPath();c.moveTo(...positions[i]);c.lineTo(...positions[j]);c.stroke();
+   links.push(`E${i+1} with E${j+1}: ${value.toFixed(2)}`);
+  }
+ }
+ c.setLineDash([]);c.lineWidth=1.5;c.textAlign='center';
+ for(const [index,[x,y]] of positions.entries()){
+  c.beginPath();c.arc(x,y,20,0,2*Math.PI);
+  c.fillStyle='#f2f7fa';c.fill();c.strokeStyle='#536273';c.stroke();
+  label(c,`E${index+1}`,x,y+4);
+ }
+ c.textAlign='start';
+ const possible=electrodes*(electrodes-1)/2;
+ const description=matrix
+  ?`${links.length} of ${possible} pairs shown at |r| ≥ ${minimum}. Solid lines are positive and dashed lines are negative. Correlations come from 100 ms training bins.`
+  :'Training profile correlations unavailable.';
+ canvas.setAttribute('aria-label',`Electrode co-activity map. ${electrodes} electrodes. Zero modeled synapses. ${description} ${links.join('; ')}`);
+ return `${electrodes} electrodes · 0 modeled synapses. ${description}`;
+}
+
 export function drawElectrodeCoactivity(canvas,matrix,electrodes){
  const c=surface(canvas),cell=Math.floor((canvas.height-56)/electrodes);
  const left=(canvas.width-cell*electrodes)/2,top=42,pairs=[];

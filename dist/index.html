@@ -10,6 +10,11 @@
 <small id="phaseStatus" role="status"></small><div class="metrics"><div><small>Clears</small><b id="clears">0</b></div><div><small>Speed</small><b id="speedValue">1.00×</b></div><div><small>Jumps</small><b id="jumps">0</b></div><div><small id="rateLabel">Input (Hz)</small><b id="sensoryRate">0 Hz</b></div></div>
 
 <div id="proximityControls"><label for="proximity">Proximity <output id="proximityValue">0.00</output></label><progress id="proximity" max="1" value="0" aria-label="Encoded obstacle proximity"></progress></div>
+<section id="finalSparkNetwork" class="map-section" aria-labelledby="finalSparkNetworkTitle" hidden>
+<h3 id="finalSparkNetworkTitle">Electrode connectivity</h3>
+<p id="finalSparkNetworkNote" class="model-note"></p>
+<div class="chart-scroll"><canvas id="finalSparkNetworkMap" width="800" height="280" role="img" aria-label="FinalSpark electrode connectivity"></canvas></div>
+</section>
 
 
 <details id="runSettings"><summary>Settings</summary><div class="session-setup"><div class="research-form"><label>ID<input id="research_experiment_id" maxlength="80" placeholder="Optional"></label><label>Trials<input id="research_trial_count" type="number" min="1" max="1000" value="10"></label><label>Limit (s)<input id="research_trial_limit_s" type="number" min="1" max="600" step="1" value="60"></label><label>Memory<select id="research_initialization"><option value="continue">Continue</option><option value="fresh">Refresh</option></select></label></div><button id="applyResearch">Apply session</button><p id="researchStatus" role="status"></p><p id="memoryStatus" class="model-note" role="status"></p></div>
@@ -50,6 +55,9 @@
 <h3 id="dataConnectivityTitle">Connections</h3>
 <p id="dataConnectivityNote" class="model-note" hidden></p>
 <div class="chart-scroll"><canvas id="dataConnectivityMap" width="800" height="340" role="img" aria-label="Selected trial connectivity"></canvas></div>
+<details id="dataCorrelationDetails" hidden><summary>Correlation values</summary>
+<div class="chart-scroll"><canvas id="dataCoactivityMatrix" width="800" height="340" role="img" aria-label="Training profile correlation matrix"></canvas></div>
+</details>
 <div id="dataWeightCharts"><h3>Weight changes</h3><label>Connection<select id="dataWeightConnection"></select></label>
 <canvas id="dataWeightHistoryMap" width="800" height="230" role="img" aria-label="Recorded weight samples"></canvas>
 <canvas id="dataWeightMap" width="800" height="370" role="img" aria-label="Selected trial beginning and end weight changes"></canvas></div>

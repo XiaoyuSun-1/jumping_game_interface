@@ -1,4 +1,4 @@
-import {drawConnections,drawPerformance,drawTrialFeedback,drawElectrodeCoactivity,drawWeights,connectivityForRecord,drawFeedback,drawWeightHistory,drawSpeed,syncWeightSelector} from './maps.js';
+import {drawConnections,drawPerformance,drawTrialFeedback,drawElectrodeMap,drawElectrodeCoactivity,drawWeights,connectivityForRecord,drawFeedback,drawWeightHistory,drawSpeed,syncWeightSelector} from './maps.js';
 import {FINALSPARK_ELECTRODES,FINALSPARK_VERSION,finalSparkCorrelations} from './finalspark.js';
 import {researchSetupKey,validateResearchSetup,csvTable} from './research-protocol.js';
 import {researchTrialRows,summarizeSessions,neuralSummary,trialFeedbackTimeline,connectionChanges,sessionChoices,recordsForSession,UNASSIGNED_SESSION} from './research-data.js';
@@ -47,13 +47,14 @@ export function createResearchUI(e,$,{download,loadRecords,startSession,busy,onP
    feedback:event.kind==='reward'?'Reward':event.punished?'Unneeded jump · punishment':'Unneeded jump',
    duration:event.duration>0?event.duration.toFixed(3)+' s':null,
   })),['time','feedback','duration']);
-  $('dataConnectivityTitle').textContent=finalSpark?'Electrode co-activity':'Connections';
+  $('dataConnectivityTitle').textContent=finalSpark?'Electrode connectivity':'Connections';
   $('dataConnectivityNote').hidden=!finalSpark;
+  $('dataCorrelationDetails').hidden=!finalSpark;
   $('dataWeightCharts').hidden=finalSpark;$('dataWeightDetails').hidden=finalSpark;
   if(finalSpark){
    const matrix=finalSparkCorrelations(r.spike_generator?.profile);
-   $('dataConnectivityNote').textContent=`${FINALSPARK_ELECTRODES} electrodes · 0 modeled synapses. ${matrix?'Pearson correlation of 100 ms spike counts in this trial’s training profile.':'Training profile correlations are unavailable.'}`;
-   drawElectrodeCoactivity($('dataConnectivityMap'),matrix,FINALSPARK_ELECTRODES);
+   $('dataConnectivityNote').textContent=drawElectrodeMap($('dataConnectivityMap'),matrix,FINALSPARK_ELECTRODES);
+   drawElectrodeCoactivity($('dataCoactivityMatrix'),matrix,FINALSPARK_ELECTRODES);
   }else{
    drawConnections($('dataConnectivityMap'),connectivityForRecord(r),r?.events??[]);
    drawWeights($('dataWeightMap'),r);syncWeightSelector($('dataWeightConnection'),r);

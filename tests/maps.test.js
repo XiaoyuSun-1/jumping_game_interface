@@ -15,6 +15,17 @@ test('performance series separate sessions, retain open trials, and mark duratio
  const groups=performanceSeries(records);assert.equal(groups.length,2);assert.deepEqual(groups[0].points.map(p=>p.trial),[1,2]);
  assert.equal(groups[0].points[0].capped,true);assert.equal(groups[1].points[0].open,true);
 });
+test('the electrode map draws each above-threshold pair once and labels both signs',async()=>{
+ const {drawElectrodeMap}=await import('../dist/maps.js');
+ const canvas={width:800,height:280,setAttribute(name,value){this[name]=value},getContext(){return new Proxy({},{get:()=>()=>{}})}};
+ const matrix=[[1,.72,.24],[.72,1,-.31],[.24,-.31,1]];
+ const caption=drawElectrodeMap(canvas,matrix,3);
+ assert.match(caption,/2 of 3 pairs/);
+ assert.match(canvas['aria-label'],/E1 with E2: 0.72/);
+ assert.match(canvas['aria-label'],/E2 with E3: -0.31/);
+ assert.doesNotMatch(canvas['aria-label'],/E1 with E3|E2 with E1/);
+ assert.match(drawElectrodeMap(canvas,null,3),/correlations unavailable/);
+});
 test('performance chart keeps clear counts integral and provides a selectable point for each series',async()=>{
  const {drawPerformance}=await import('../dist/maps.js');
  const labels=[],context=new Proxy({fillText:(text,x,y)=>labels.push({text,x,y})},{get:(target,key)=>target[key]??(()=>{})});

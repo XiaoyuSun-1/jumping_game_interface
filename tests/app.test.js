@@ -53,6 +53,8 @@ test('simplified interface preserves sessions, recordings, neural inspection and
  assert.equal(node('mode').value,'neural');
  assert.equal(node('simulationSourceLabel').hidden,false);
  assert.equal(node('networkDetails').hidden,true);
+ assert.equal(node('finalSparkNetwork').hidden,false);
+ assert.match(node('finalSparkNetworkMap')['aria-label'],/8 electrodes/);
  assert.equal(node('sourceNote').hidden,false);
  node('step').onclick();node('step').onclick();await node('downloadRecordings').onclick();
  const finalSparkRun=JSON.parse(await exported.text()).trials.at(-1);
@@ -60,12 +62,15 @@ test('simplified interface preserves sessions, recordings, neural inspection and
  node('researchFilter').value='';await node('viewResults').onclick();
  node('researchSession').value=finalSparkRun.research.session_id;node('researchSession').onchange();
  assert.match(node('recordInfo').textContent,/FinalSpark-trained simulation/);
- assert.equal(node('dataConnectivityTitle').textContent,'Electrode co-activity');
+ assert.equal(node('dataConnectivityTitle').textContent,'Electrode connectivity');
  assert.match(node('dataConnectivityMap')['aria-label'],/8 electrodes. Zero modeled synapses/);
+ assert.match(node('dataCoactivityMatrix')['aria-label'],/Training profile spike-count correlation/);
+ assert.equal(node('dataCorrelationDetails').hidden,false);
  assert.equal(node('dataWeightCharts').hidden,true);
  node('showGame').onclick();
  node('mode').value='manual';node('mode').onchange();
  assert.equal(node('simulationSourceLabel').hidden,true);
+ assert.equal(node('finalSparkNetwork').hidden,true);
  node('mode').value='neural';node('mode').onchange();
  node('simulationSource').value='lif';node('simulationSource').onchange();
  broken=true;await node('runTrials').onclick();assert.ok(node('recordingStatus').textContent.includes('failed'));
