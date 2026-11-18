@@ -10,3 +10,11 @@ summary{display:inline-block;border:1px solid #aaa;background:#f7f7f7;padding:5p
 .connection-controls{display:flex;flex-wrap:wrap;align-items:end;gap:12px}.connection-controls input[type=number]{width:90px}.connection-controls .toggle{align-self:center}#connectionStatus:empty{display:none}#networkDetails>summary,#runSettings>summary{min-width:90px}#start{background:#222;color:white;border:1px solid #222;padding:8px 18px}.map-section h3{font-size:14px}.game-wrap{margin-top:12px}
 
 .data-controls{display:grid;grid-template-columns:minmax(0,2fr) minmax(150px,1fr);gap:16px;align-items:end;margin:18px 0}.data-controls select,.data-controls input{width:100%;min-width:0}#researchSession{max-width:100%}@media(max-width:650px){.data-controls{grid-template-columns:1fr}}
+.chart-scroll{overflow-x:auto}
+#dataPerformanceMap{cursor:pointer}
+#trialFeedback{scroll-margin-top:16px}
+#dataPerformanceTitle,#trialFeedbackTitle,#dataConnectivityTitle{font-size:16px;margin-top:0}
+#dataWeightCharts canvas{margin-top:12px}
+@media(max-width:650px){
+ #dataPerformanceMap,#trialFeedbackMap,#dataConnectivityMap{min-width:560px}
+}

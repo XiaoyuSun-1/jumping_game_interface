@@ -2,6 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {Engine} from '../dist/engine.js';
 import {neuralSummary} from '../dist/research-data.js';
+import {finalSparkCorrelations} from '../dist/finalspark.js';
 
 test('FinalSpark drives jumps with reproducible 100 ms electrode bins and preserves source metadata', () => {
  const create=()=>new Engine({simulationSource:'finalspark',threshold:1,emptyJumpPenalty:false});
@@ -60,4 +61,13 @@ test('a FinalSpark trial captures all full play bins across penalty and collisio
  assert.equal(collision.crashed,true);
  assert.ok(collision.events.some(packet=>packet.type==='response'&&packet.payload.bin_ms===100));
  assert.equal(collision.jumps,0);
+});
+test('FinalSpark exposes eight electrode correlations and preserves missing profiles',()=>{
+ const matrix=finalSparkCorrelations('fs396-org0');
+ assert.equal(matrix.length,8);
+ assert.ok(matrix.every(row=>row.length===8));
+ assert.equal(matrix[0][0],1);
+ assert.equal(matrix[0][1],matrix[1][0]);
+ assert.ok(Math.abs(matrix[0][1]-0.0028899378391754505)<1e-8);
+ assert.equal(finalSparkCorrelations('missing'),null);
 });

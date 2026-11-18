@@ -1,6 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {readFile} from 'node:fs/promises';
+import {drawPerformance} from '../dist/maps.js';
 
 test('simplified interface preserves sessions, recordings, neural inspection and refresh behavior',async()=>{
  const recordingRows=new Map([['legacy',{id:'legacy',revision:1,started_at:'2020-01-01',trial:1,simulation:true,mode:'neural',model_version:'lif-dishbrain-v2',game_current:{time_s:3,clears:0,jumps:0,rewards:0},network_start:{neurons:Array.from({length:32},(_,id)=>({id})),synapses:[]},events:[{type:'response',payload:{bin_ms:50,cell_counts:Array(32).fill(1)}}]}]]);let broken=false;const paints=new Map();
@@ -8,7 +9,7 @@ test('simplified interface preserves sessions, recordings, neural inspection and
  globalThis.indexedDB={open(){const request={result:db};queueMicrotask(()=>request.onsuccess());return request}};
  const html=await readFile(new URL('../dist/index.html',import.meta.url),'utf8'),nodes=new Map(),saved=new Map();
  globalThis.localStorage={getItem:key=>saved.get(key)??null,setItem:(key,value)=>saved.set(key,value),removeItem:key=>saved.delete(key)};
- function element(id){return {id,value:'',checked:true,style:{},textContent:'',tagName:'DIV',hidden:false,children:[],setAttribute(k,v){this[k]=v},click(){},append(...items){this.children.push(...items)},replaceChildren(...items){this.children=items},focus(){},getContext(){return new Proxy({},{get:(_,method)=>()=>{if(method==='clearRect')paints.set(id,(paints.get(id)??0)+1)}})}}}
+ function element(id){return {id,value:'',checked:true,style:{},textContent:'',tagName:'DIV',hidden:false,children:[],width:800,height:id==='dataPerformanceMap'?550:390,setAttribute(k,v){this[k]=v},click(){},append(...items){this.children.push(...items)},replaceChildren(...items){this.children=items},focus(){this.focused=true},scrollIntoView(){this.scrolled=true},getBoundingClientRect(){return {left:11,top:19,width:this.width/2,height:this.height/2}},getContext(){return new Proxy({},{get:(_,method)=>()=>{if(method==='clearRect')paints.set(id,(paints.get(id)??0)+1)}})}}}
  for(const match of html.matchAll(/id="([^"]+)"/g))nodes.set(match[1],element(match[1]));
  const node=id=>{assert.ok(nodes.has(id),'Referenced UI element must exist: '+id);return nodes.get(id)};
  globalThis.document={getElementById:node,createElement:element,addEventListener(){},activeElement:{tagName:'BODY'}};
@@ -28,6 +29,15 @@ test('simplified interface preserves sessions, recordings, neural inspection and
  assert.ok(trials.every(r=>r.network_start.synapses.every((s,i)=>s.weight===r.network_end.synapses[i].weight)),'frozen weights remain unchanged');
  assert.equal(node('start').textContent,'Complete');
  await node('viewResults').onclick();assert.equal(node('performanceView').hidden,false);assert.equal(node('activeResearch').hidden,true,'live-run status must not be confused with the selected archive session');assert.equal(node('gameView').hidden,true);assert.ok(node('researchRows').children.length>=25);assert.equal(node('recordChannels').children.length,8);assert.ok(node('recordWeights').children.length>0);assert.equal(node('recordNeuron').children.length,9);
+ assert.ok(html.indexOf('id="dataPerformanceMap"')<html.indexOf('id="trialFeedbackMap"'));
+ assert.ok(html.indexOf('id="trialFeedbackMap"')<html.indexOf('id="dataSpeedMap"'));
+ const firstTrial=trials.find(record=>record.research.session_trial_index===1);
+ const point=drawPerformance(node('dataPerformanceMap'),trials,{clearFloor:10}).find(marker=>marker.id===firstTrial.id);
+ node('dataPerformanceMap').onclick({clientX:11+point.x/2,clientY:19+point.y/2});
+ assert.equal(node('recordSelect').value,firstTrial.id);
+ assert.equal(node('recordSelect').focused,true);
+ assert.equal(node('trialFeedback').scrolled,true);
+ assert.match(node('recordInfo').textContent,/^Trial 1 ·/);
  node('researchFilter').value='';node('researchFilter').oninput();const chosenSession=node('researchSession').value;assert.ok(node('researchSession').children.length>=2);node('researchSession').value='__unassigned__';node('researchSession').onchange();assert.equal(node('researchRows').children.length,1);assert.match(node('dataFeedbackMap')['aria-label'],/1 trials/);node('recordSelect').value='legacy';node('recordSelect').onchange();assert.equal(node('recordChannels').children.length,32);assert.equal(node('recordNeuron').children.length,33);
  node('researchSession').value=chosenSession;node('researchSession').onchange();assert.equal(node('researchRows').children.length,25);assert.match(node('dataFeedbackMap')['aria-label'],/25 trials across 1 sessions/);node('researchFilter').value='UI-test';node('researchFilter').oninput();
  node('researchTrialsCsv').onclick();const csv=await exported.text();assert.ok(csv.includes('UI-test'));assert.ok(csv.includes('"seconds"'));assert.ok(!csv.includes('distance_m'));
@@ -50,6 +60,9 @@ test('simplified interface preserves sessions, recordings, neural inspection and
  node('researchFilter').value='';await node('viewResults').onclick();
  node('researchSession').value=finalSparkRun.research.session_id;node('researchSession').onchange();
  assert.match(node('recordInfo').textContent,/FinalSpark-trained simulation/);
+ assert.equal(node('dataConnectivityTitle').textContent,'Electrode co-activity');
+ assert.match(node('dataConnectivityMap')['aria-label'],/8 electrodes. Zero modeled synapses/);
+ assert.equal(node('dataWeightCharts').hidden,true);
  node('showGame').onclick();
  node('mode').value='manual';node('mode').onchange();
  assert.equal(node('simulationSourceLabel').hidden,true);

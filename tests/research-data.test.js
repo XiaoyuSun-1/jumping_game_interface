@@ -1,4 +1,5 @@
 import {test} from 'node:test';
+import {trialFeedbackTimeline} from '../dist/research-data.js';
 import assert from 'node:assert/strict';
 import {researchTrialRows,summarizeSessions,neuralSummary,connectionChanges} from '../dist/research-data.js';
 import {Engine} from '../dist/engine.js';
@@ -66,4 +67,21 @@ test('session choices isolate records and sort trials within the selected sessio
  assert.deepEqual(sessionChoices(records).map(s=>s.id),['b','a',UNASSIGNED_SESSION]);
  assert.deepEqual(recordsForSession(records,'a').map(r=>r.id),['a1','a2']);assert.deepEqual(recordsForSession(records,'b').map(r=>r.id),['b1']);assert.deepEqual(recordsForSession(records,'missing'),[]);
  assert.equal(sessionChoices(records).find(s=>s.id==='a').trials,2);
+});
+test('trial feedback uses elapsed timing, deduplicates phase packets, and excludes collisions',()=>{
+ const record={result:{time_s:4.25,outcome:'collision'},events:[
+  {type:'phase',t_ms:1000,payload:{phase:'reward',duration_ms:1000}},
+  {type:'feedback',t_ms:1000,payload:{outcome:'reward',duration_ms:1000}},
+  {type:'outcome',t_ms:2000,payload:{outcome:'empty jump',punished:false}},
+  {type:'outcome',t_ms:4000,payload:{outcome:'empty jump',punished:true}},
+  {type:'phase',t_ms:4000,payload:{phase:'punishment',duration_ms:500}},
+  {type:'feedback',t_ms:4000,payload:{outcome:'empty jump',duration_ms:500}},
+  {type:'outcome',t_ms:4250,payload:{outcome:'collision'}},
+  {type:'phase',t_ms:4250,payload:{phase:'training',duration_ms:1000}},
+ ]};
+ assert.deepEqual(trialFeedbackTimeline(record).events,[
+  {kind:'reward',seconds:1,duration:1,punished:false},
+  {kind:'unneeded',seconds:2,duration:0,punished:false},
+  {kind:'unneeded',seconds:4,duration:.25,punished:true},
+ ]);
 });
