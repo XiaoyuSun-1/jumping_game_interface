@@ -34,4 +34,6 @@ with np.load(args.model, allow_pickle=False) as model:
             raise ValueError(f"Invalid patterns or weights for {name}.")
         profiles.append({"name": str(name), "patterns": patterns.tolist(), "weights": weights.tolist()})
 
-args.output.write_text(json.dumps(profiles, separators=(",", ":")) + "\n", encoding="utf-8")
+args.output.write_text(
+    json.dumps(profiles, separators=(",", ":")) + "\n", encoding="utf-8", newline="\n"
+)
