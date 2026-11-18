@@ -1,9 +1,10 @@
-import {drawConnections,drawPerformance,drawWeights,connectivityForRecord,drawFeedback,drawWeightHistory,drawSpeed,syncWeightSelector} from './maps.js';
+import {drawConnections,drawPerformance,drawTrialFeedback,drawElectrodeMap,drawElectrodeCoactivity,drawWeights,connectivityForRecord,drawFeedback,drawWeightHistory,drawSpeed,syncWeightSelector} from './maps.js';
+import {FINALSPARK_ELECTRODES,FINALSPARK_VERSION,finalSparkCorrelations} from './finalspark.js';
 import {researchSetupKey,validateResearchSetup,csvTable} from './research-protocol.js';
-import {researchTrialRows,summarizeSessions,neuralSummary,connectionChanges,sessionChoices,recordsForSession,UNASSIGNED_SESSION} from './research-data.js';
+import {researchTrialRows,summarizeSessions,neuralSummary,trialFeedbackTimeline,connectionChanges,sessionChoices,recordsForSession,UNASSIGNED_SESSION} from './research-data.js';
 
 export function createResearchUI(e,$,{download,loadRecords,startSession,busy,onPrepared}){
- let records=[],sessionId=null;
+ let records=[],sessionId=null,plotted=[],performancePoints=[];
  let draft=validateResearchSetup();
  try{const saved=localStorage.getItem(researchSetupKey);if(saved)draft=validateResearchSetup(JSON.parse(saved))}catch{$('researchStatus').textContent='Saved setup unavailable; previous saved value kept.'}
  $('research_experiment_id').value=draft.experiment_id??'';$('research_trial_count').value=draft.trial_count;
@@ -24,7 +25,7 @@ export function createResearchUI(e,$,{download,loadRecords,startSession,busy,onP
  const currentRecords=()=>{const map=new Map(records.map(r=>[r.id,r]));for(const r of e.exportRecordings())if(r.events.length)map.set(r.id,r);return [...map.values()].sort((a,b)=>(a.started_at??'').localeCompare(b.started_at??''))};
  const searched=()=>{const query=$('researchFilter').value.trim().toLowerCase();return currentRecords().filter(r=>!query||[r.research?.experiment_id,r.research?.session_id].some(v=>String(v??'').toLowerCase().includes(query)))};
  const filtered=()=>recordsForSession(searched(),sessionId);
- const selected=()=>filtered().find(r=>r.id===$('recordSelect').value);
+ const selected=()=>plotted.find(r=>r.id===$('recordSelect').value);
  function renderWeights(){
   const r=selected();if(!r)return;
   const id=$('recordNeuron').value;
@@ -36,16 +37,42 @@ export function createResearchUI(e,$,{download,loadRecords,startSession,busy,onP
   table('recordBins',(r.events??[]).filter(p=>p.type==='response').slice(-200).map(p=>({time_ms:p.session_time_ms??null,phase:p.payload.phase??p.payload.origin,bin_ms:p.payload.bin_ms,spikes:p.payload[field]?.[id]??null})),['time_ms','phase','bin_ms','spikes']);
  }
  function inspect(){
-  const r=selected();drawConnections($('dataConnectivityMap'),connectivityForRecord(r),r?.events??[]);drawWeights($('dataWeightMap'),r);syncWeightSelector($('dataWeightConnection'),r);drawWeightHistory($('dataWeightHistoryMap'),r,$('dataWeightConnection').value);if(!r){$('recordInfo').textContent='—';for(const id of ['recordWeights','recordChannels','recordBins'])$(id).replaceChildren();$('recordChannel').replaceChildren();return}
+  const r=selected(),finalSpark=r?.model_version===FINALSPARK_VERSION;
+  performancePoints=drawPerformance($('dataPerformanceMap'),plotted,{selectedId:r?.id,clearFloor:10});
+  const timeline=trialFeedbackTimeline(r);
+  drawTrialFeedback($('trialFeedbackMap'),timeline);
+  $('trialFeedbackTimes').hidden=!timeline.events.length;
+  table('trialFeedbackRows',timeline.events.map(event=>({
+   time:event.seconds.toFixed(3)+' s',
+   feedback:event.kind==='reward'?'Reward':event.punished?'Unneeded jump · punishment':'Unneeded jump',
+   duration:event.duration>0?event.duration.toFixed(3)+' s':null,
+  })),['time','feedback','duration']);
+  $('dataConnectivityTitle').textContent=finalSpark?'Electrode connectivity':'Connections';
+  $('dataConnectivityNote').hidden=!finalSpark;
+  $('dataCorrelationDetails').hidden=!finalSpark;
+  $('dataWeightCharts').hidden=finalSpark;$('dataWeightDetails').hidden=finalSpark;
+  if(finalSpark){
+   const matrix=finalSparkCorrelations(r.spike_generator?.profile);
+   $('dataConnectivityNote').textContent=drawElectrodeMap($('dataConnectivityMap'),matrix,FINALSPARK_ELECTRODES);
+   drawElectrodeCoactivity($('dataCoactivityMatrix'),matrix,FINALSPARK_ELECTRODES);
+  }else{
+   drawConnections($('dataConnectivityMap'),connectivityForRecord(r),r?.events??[]);
+   drawWeights($('dataWeightMap'),r);syncWeightSelector($('dataWeightConnection'),r);
+   drawWeightHistory($('dataWeightHistoryMap'),r,$('dataWeightConnection').value);
+  }
+  if(!r){$('recordInfo').textContent='No trial selected.';$('activityWarnings').textContent='';for(const id of ['recordWeights','recordChannels','recordBins','recordChannel'])$(id).replaceChildren();return}
   const summary=neuralSummary(r),game=r.result??r.game_current;
-  $('recordInfo').textContent=`Trial ${r.research?.session_trial_index??r.trial} · ${game?.outcome??'open'} · ${r.recording_complete?'Complete':'Partial'} · ${(summary.duration_ms/1000).toFixed(2)} s${r.skipped_phase?' · Interrupted':''}. ${summary.warnings.join(' ')}`;
+  const survived=Number.isFinite(game?.time_s)?game.time_s.toFixed(2)+' s survived':'Survival unavailable';
+  $('recordInfo').textContent=`Trial ${r.research?.session_trial_index??r.trial} · ${survived} · ${game?.clears??'—'} clears · ${game?.outcome??'open'} · ${r.recording_complete?'Complete recording':'Partial recording'}${r.skipped_phase?' · Interrupted':''}.`;
+  $('activityWarnings').textContent=[summary.duration_ms>0?`Recorded spike bins cover ${(summary.duration_ms/1000).toFixed(2)} s.`:'',...summary.warnings].filter(Boolean).join(' ');
+  if(finalSpark)$('recordInfo').textContent+=' FinalSpark-trained simulation. Game feedback leaves its spike model fixed.';
   const neuron=$('recordNeuron'),previousNeuron=neuron.value;neuron.replaceChildren();
   const ids=r.network_start?.neurons?.map(n=>n.id)??[];
   for(const id of ['all',...ids]){const option=document.createElement('option');option.value=String(id);option.textContent=id==='all'?'All neurons':'N'+id;neuron.append(option)}
   neuron.value=ids.some(id=>String(id)===previousNeuron)?previousNeuron:'all';
   if(r.training?.pair)$('recordInfo').textContent+=` Training N${r.training.pair[0]} + N${r.training.pair[1]}: ${r.training.delivered?'delivered':'interrupted'}.`;
-  table('recordChannels',summary.channels,['id','spikes','rate_hz']);
-  const channel=$('recordChannel'),old=channel.value;channel.replaceChildren();for(const cell of summary.channels){const option=document.createElement('option');option.value=String(cell.id);option.textContent=(summary.kind==='cells'?'N':'E')+cell.id;channel.append(option)}channel.value=summary.channels.some(c=>String(c.id)===old)?old:String(summary.channels[0]?.id??'');
+  table('recordChannels',summary.channels.map(cell=>finalSpark?{...cell,id:'E'+(cell.id+1)}:cell),['id','spikes','rate_hz']);
+  const channel=$('recordChannel'),old=channel.value;channel.replaceChildren();for(const cell of summary.channels){const option=document.createElement('option');option.value=String(cell.id);option.textContent=finalSpark?'E'+(cell.id+1):(summary.kind==='cells'?'N':'E')+cell.id;channel.append(option)}channel.value=summary.channels.some(c=>String(c.id)===old)?old:String(summary.channels[0]?.id??'');
   renderWeights();renderBins();
  }
  $('recordNeuron').onchange=renderWeights;
@@ -62,12 +89,40 @@ export function createResearchUI(e,$,{download,loadRecords,startSession,busy,onP
   }
   if(!choices.length){const option=document.createElement('option');option.value='';option.textContent='No sessions';session.append(option)}
   session.disabled=!choices.length;session.value=choices.length?sessionId:'';
-  const items=filtered(),rows=researchTrialRows(items),sessions=summarizeSessions(items).reverse();drawPerformance($('dataPerformanceMap'),items);drawFeedback($('dataFeedbackMap'),items);drawSpeed($('dataSpeedMap'),items);
+  const items=filtered(),rows=researchTrialRows(items),sessions=summarizeSessions(items).reverse();
+  plotted=items;drawFeedback($('dataFeedbackMap'),items);drawSpeed($('dataSpeedMap'),items);
   table('sessionRows',sessions,['experiment_id','session_id','completed','incomplete','mean_seconds','mean_clears','mean_jumps','settings_changed']);
   table('researchRows',rows.slice(-500).reverse(),['trial','seconds','speed_px_s','clears','jumps','outcome','settings_changed']);
   $('researchDataCount').textContent=choices.length?`${rows.length} trials`:'No sessions';
-  const select=$('recordSelect'),old=select.value;select.replaceChildren();for(const r of items.slice().reverse()){const option=document.createElement('option');option.value=r.id;option.textContent=`Trial ${r.research?.session_trial_index??r.trial} · ${(r.result??r.game_current)?.outcome??'Live'}`;select.append(option)}select.value=items.some(r=>r.id===old)?old:items.at(-1)?.id??'';inspect();
+  const select=$('recordSelect'),old=select.value,counts=new Map();
+  for(const r of items){
+   const no=r.research?.session_trial_index??r.trial;counts.set(no,(counts.get(no)??0)+1);
+  }
+  select.replaceChildren();
+  for(const r of items.slice().reverse()){
+   const option=document.createElement('option'),no=r.research?.session_trial_index??r.trial;
+   const duplicate=counts.get(no)>1?` · ${String(r.id).slice(0,8)}`:'';
+   option.value=r.id;
+   option.textContent=`Trial ${no} · ${(r.result??r.game_current)?.outcome??'Live'}${r.spike_generator?' · FinalSpark-trained':''}${duplicate}`;
+   select.append(option);
+  }
+  select.value=items.some(r=>r.id===old)?old:items.at(-1)?.id??'';select.disabled=!items.length;inspect();
  }
+ const performanceCanvas=$('dataPerformanceMap');
+ performanceCanvas.onclick=event=>{
+  const box=performanceCanvas.getBoundingClientRect();
+  let nearest=null,best=16**2;
+  for(const point of performancePoints){
+   const dx=box.left+point.x*box.width/performanceCanvas.width-event.clientX;
+   const dy=box.top+point.y*box.height/performanceCanvas.height-event.clientY;
+   const distance=dx*dx+dy*dy;
+   if(distance<best){nearest=point;best=distance}
+  }
+  if(!nearest)return;
+  const select=$('recordSelect');
+  select.value=nearest.id;inspect();
+  select.focus({preventScroll:true});$('trialFeedback').scrollIntoView({block:'start'});
+ };
  async function reload(){try{records=await loadRecords();$('researchDataStatus').textContent=''}catch{$('researchDataStatus').textContent='Archive unavailable; showing retained recordings.'}renderData()}
  $('researchSession').onchange=()=>{sessionId=$('researchSession').value;renderData()};
  $('refreshResearch').onclick=reload;$('researchFilter').oninput=renderData;$('recordSelect').onchange=inspect;$('recordChannel').onchange=renderBins;

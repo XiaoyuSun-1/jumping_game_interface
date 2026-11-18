@@ -1,5 +1,7 @@
 node_modules/
 results/
+/Indiv_organoids.zip
+__pycache__/
 *.jsonl
 *.log
 .env

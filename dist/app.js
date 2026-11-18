@@ -1,7 +1,8 @@
 import {Engine} from './engine.js';
 import {openArchive,writeRecords,readRecords} from './archive.js';
 import {saveMemory,restoreMemory,legacyMemoryKey} from './memory.js';
-import {drawConnections,drawPerformance,drawWeights,recentModelEvents,drawFeedback,drawWeightHistory,drawSpeed,syncWeightSelector} from './maps.js';
+import {drawConnections,drawElectrodeMap,drawPerformance,drawWeights,recentModelEvents,drawFeedback,drawWeightHistory,drawSpeed,syncWeightSelector} from './maps.js';
+import {FINALSPARK_ELECTRODES,finalSparkCorrelations} from './finalspark.js';
 import {CELL_LABELS} from './network.js';
 import {createInspector} from './inspector.js';
 import {createResearchUI} from './research-ui.js';
@@ -54,10 +55,16 @@ $('runTrials').onclick=async()=>{
 function jump(){if(e.config.mode==='manual'&&running)e.jump()}
 $('game').onclick=jump;
 window.addEventListener('keydown',event=>{if(event.code!=='Space'||['INPUT','SELECT','BUTTON','TEXTAREA'].includes(document.activeElement.tagName)||e.config.mode!=='manual')return;event.preventDefault();jump()});
-$('mode').onchange=()=>{if(running||training)return;e.startResearchSession({...e.researchSession.setup,initialization:'continue'},{mode:$('mode').value});persistRecordings(true);update();draw()};
+$('mode').onchange=()=>changeSimulation({mode:$('mode').value});
+$('simulationSource').onchange=()=>changeSimulation({simulationSource:$('simulationSource').value});
+function changeSimulation(settings){
+ if(running||training)return;
+ e.startResearchSession({...e.researchSession.setup,initialization:'continue'},settings);syncControls();persistMemory(true);persistRecordings(true);update();draw();
+}
 $('trainingMode').onchange=()=>{if(running||training)return;e.startResearchSession({...e.researchSession.setup,initialization:'continue'},{trainingMode:$('trainingMode').value});persistMemory(true);persistRecordings(true);update();draw()};
 const numeric=['stimulusGain','horizon','threshold','latency','learningRate','speed'],toggles=['sensory','feedback','plasticity','emptyJumpPenalty','rewiring','adaptiveSpeed'];
-function syncControls(){for(const key of numeric)$(key).value=e.config[key];for(const key of toggles)$(key).checked=e.config[key];$('mode').value=e.config.mode;$('trainingMode').value=e.config.trainingMode}
+const learningControls=new Set(['stimulusGain','horizon','latency','learningRate','sensory','feedback','plasticity','rewiring','trainingMode']);
+function syncControls(){for(const key of numeric)$(key).value=e.config[key];for(const key of toggles)$(key).checked=e.config[key];$('mode').value=e.config.mode;$('simulationSource').value=e.config.simulationSource;$('trainingMode').value=e.config.trainingMode}
 for(const key of [...numeric,...toggles])$(key).onchange=()=>{try{if(key==='speed'){e.startResearchSession({...e.researchSession.setup,initialization:'continue'},{speed:Number($(key).value)});persistRecordings(true)}else e.configure({[key]:toggles.includes(key)?$(key).checked:Number($(key).value)});persistMemory(true);update()}catch(err){notice(err.message);syncControls()}};
 $('downloadRecordings').onclick=async()=>{
  let saved=[],archiveAvailable=true;try{saved=await loadRecords()}catch{archiveAvailable=false}
@@ -66,11 +73,20 @@ $('downloadRecordings').onclick=async()=>{
  if(!archiveAvailable)notice('Archive unavailable. JSON contains retained recordings only.');
 };
 const ctx=$('game').getContext('2d'),rctx=$('raster').getContext('2d');
-const renderInspector=createInspector(e,()=>!running&&!training&&e.config.mode==='neural',()=>{persistMemory(true);update();draw()});
+const renderInspector=createInspector(e,()=>!running&&!training&&e.learningSimulation,()=>{persistMemory(true);update();draw()});
+let displayedElectrodeProfile=null;
 function update(){
- research.render();renderInspector();persistRecordings();persistMemory();
- if(!$('gameView').hidden){
-  const network=e.config.mode==='bridge'?null:e.model.snapshot();
+ research.render();if(!e.usesFinalSpark)renderInspector();persistRecordings();persistMemory();
+ $('networkDetails').hidden=e.usesFinalSpark;$('sourceNote').hidden=!e.usesFinalSpark;$('proximityControls').hidden=e.usesFinalSpark;
+ $('finalSparkNetwork').hidden=!e.usesFinalSpark;
+ if(!$('gameView').hidden&&e.usesFinalSpark&&e.finalSpark.profile!==displayedElectrodeProfile){
+  displayedElectrodeProfile=e.finalSpark.profile;
+  const matrix=finalSparkCorrelations(displayedElectrodeProfile);
+  $('finalSparkNetworkNote').textContent=drawElectrodeMap($('finalSparkNetworkMap'),matrix,FINALSPARK_ELECTRODES);
+ }
+ $('simulationSourceLabel').hidden=e.config.mode!=='neural';$('rateLabel').textContent=e.usesFinalSpark?'Electrode output (Hz)':'Input (Hz)';
+ if(!$('gameView').hidden&&!e.usesFinalSpark){
+  const network=e.usesLif?e.model.snapshot():null;
   drawConnections($('connectivityMap'),e.connectivitySnapshot,recentModelEvents(e.recordings));
   const completed=e.trials.filter(t=>t.research?.session_id===e.researchSession.id).map(t=>({id:t.id,research:t.research,result:t,config_start:t.config}));
   if(!e.trialRecorded)completed.push({research:e.currentRecording.research,config_start:e.config,game_current:{time_s:e.time,clears:e.clears,rewards:e.rewards,empty_jump_punishments:e.emptyJumpPunishments,speed_px_s:e.currentSpeed}});
@@ -84,8 +100,9 @@ function update(){
  $('status').textContent=complete?'Complete':active?'Running':e.time?'Paused':'Ready';
  $('start').textContent=running?'Pause':complete?'Complete':e.time?'Resume':'Start';$('start').disabled=training||complete;
  $('runTrials').textContent=training?'Pause fast':'Fast';$('runTrials').disabled=running||e.config.mode!=='neural';
- $('reset').disabled=training;$('step').disabled=active||complete;$('mode').disabled=active;$('trainingMode').disabled=active;for(const key of [...numeric,...toggles])$(key).disabled=active;
- $('clock').textContent=e.time.toFixed(2)+' / '+(e.researchSession.setup.trial_limit_s??'∞')+' s';$('clears').textContent=e.clears;$('speedValue').textContent=e.currentSpeed.toFixed(0)+' px/s';$('jumps').textContent=e.jumps;$('sensoryRate').textContent=e.phase==='play'?(e.config.sensory?e.modelRate:0).toFixed(1)+' Hz':'—';
+ $('reset').disabled=training;$('step').disabled=active||complete;$('mode').disabled=active;$('simulationSource').disabled=active;
+ for(const key of [...numeric,...toggles,'trainingMode'])$(key).disabled=active||(e.usesFinalSpark&&learningControls.has(key));
+ $('clock').textContent=e.time.toFixed(2)+' / '+(e.researchSession.setup.trial_limit_s??'∞')+' s';$('clears').textContent=e.clears;$('speedValue').textContent=e.currentSpeed.toFixed(0)+' px/s';$('jumps').textContent=e.jumps;$('sensoryRate').textContent=e.phase==='play'?(e.usesFinalSpark?e.rate:e.config.sensory?e.modelRate:0).toFixed(1)+' Hz':'—';
  const proximity=e.phase==='play'&&e.config.sensory?(e.latestStim?.payload.normalized_intensity??0):0;$('proximity').value=proximity;$('proximityValue').textContent=proximity.toFixed(2);
  $('phaseStatus').textContent=e.phase==='play'?'':(e.phase==='reward'?'Reward':e.phase==='punishment'?'Unneeded jump':e.phase==='training'?'Collision':complete?'Complete':'Trial ended')+(e.phaseRemaining>0?' · '+e.phaseRemaining.toFixed(1)+' s':'');
 }
@@ -96,6 +113,7 @@ function drawGame(){
  ctx.beginPath();ctx.arc(114,ground-e.y-14,14,0,Math.PI*2);ctx.fill();
 }
 function drawRaster(){
+ if(e.usesFinalSpark)return;
  rctx.clearRect(0,0,1000,420);rctx.fillStyle='#fff';rctx.fillRect(0,0,1000,420);rctx.font='10px monospace';
  const rowHeight=420/CELL_LABELS.length;
  for(let cell=0;cell<CELL_LABELS.length;cell++){const y=cell*rowHeight;rctx.fillStyle='#555';rctx.fillText('N'+cell+' '+CELL_LABELS[cell],4,y+24);rctx.strokeStyle='#e5e7eb';rctx.beginPath();rctx.moveTo(110,y+38);rctx.lineTo(1000,y+38);rctx.stroke()}
@@ -108,5 +126,5 @@ function frame(now){
 }
 document.addEventListener('visibilitychange',()=>{if(document.hidden){cancel=true;if(running)setRunning(false)}});
 window.addEventListener('pagehide',()=>{persistMemory(true);persistRecordings(true)});
-$('weightConnection').onchange=()=>drawWeightHistory($('weightHistoryMap'),{...e.currentRecording,network_end:e.config.mode==='bridge'?null:e.model.snapshot()},$('weightConnection').value);
+$('weightConnection').onchange=()=>drawWeightHistory($('weightHistoryMap'),{...e.currentRecording,network_end:e.usesLif?e.model.snapshot():null},$('weightConnection').value);
 syncControls();update();draw();requestAnimationFrame(frame);

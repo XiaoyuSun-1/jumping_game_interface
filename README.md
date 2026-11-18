@@ -16,6 +16,7 @@ Open [localhost:4173](http://127.0.0.1:4173).
 
 - **Start** runs or pauses the game. **Fast** runs trials more quickly.
 - Choose **Manual** to jump with Space or by clicking the game.
+- Under **Simulation**, choose **FinalSpark-trained** to drive jumps from synthetic eight-electrode recordings, or **Learning network** for the original controller.
 - In **Settings**, choose the trial count and time limit. The default is 60 seconds per trial. Click **Apply session** after changing the setup.
 - **Continue** keeps the learned network. **Refresh** starts a fresh network and keeps past recordings.
 
@@ -33,6 +34,14 @@ Open [localhost:4173](http://127.0.0.1:4173).
 Open **Data → Session** to choose a run. Its trials appear together in the charts, with separate reward, collision, and unnecessary-jump panels.
 
 **CSV** exports the selected session. **All JSON** backs up all available recordings. Your network and recordings are saved in this browser; they are not shared between computers.
+
+## FinalSpark-trained simulation
+
+The browser generates new 100 ms electrode count bins from the fitted spontaneous-activity model. A jump can fire when the summed electrode rate meets the jump threshold, subject to the game's normal jump rules. At 20 Hz this requires two detected spikes across the eight electrodes in the current bin. Game outcomes are scored normally. The sampled activity is independent of obstacle and reward signals, so this source serves as an open-loop baseline for comparison with the learning network.
+
+The bundled model was fitted to 32 recordings from the public human forebrain organoid spike archive collected on the FinalSpark Neuroplatform. Thirteen recordings in separate recording groups were held out. The model reproduces some short-lag activity patterns and tends to generate quieter, more variable recordings than the holdout. Exported trials identify the model version, sampled training profile, and generator seed. [Itatani and Zavaglia, 2026, Zenodo, CC BY 4.0](https://doi.org/10.5281/zenodo.22755004)
+
+The model asset runs in the browser. The [model package](models/finalspark/) includes the fitted Python model, training code, validation results, and commands to regenerate the browser asset.
 
 ## Run without the interface
 

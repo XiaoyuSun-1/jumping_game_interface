@@ -25,11 +25,13 @@ export function connectionMap(network,events=[],windowMs=1000){
 }
 export function performanceSeries(records){
  const groups=new Map();
- for(const r of records){
-  const game=r.result??r.game_current;if(!game||!Number.isFinite(game.time_s))continue;
+ for(const [index,r] of records.entries()){
+  const game=r.result??r.game_current;if(!game||!Number.isFinite(game.time_s)||game.time_s<0)continue;
   const id=r.research?.session_id??'Unassigned';
   if(!groups.has(id))groups.set(id,{id,points:[]});
-  groups.get(id).points.push({trial:r.research?.session_trial_index??r.trial,seconds:game.time_s,clears:game.clears??0,capped:game.outcome==='time limit',open:!r.result});
+  const trial=r.research?.session_trial_index??r.trial;
+  const clears=Number.isInteger(game.clears)&&game.clears>=0?game.clears:0;
+  groups.get(id).points.push({id:r.id,trial:Number.isInteger(trial)&&trial>0?trial:index+1,seconds:game.time_s,clears,capped:game.outcome==='time limit',open:!r.result});
  }
  return [...groups.values()].map(g=>({...g,points:g.points.sort((a,b)=>a.trial-b.trial)}));
 }
@@ -67,26 +69,139 @@ export function drawConnections(canvas,network,events=[]){
  label(c,external?`Adapter-reported channel connections · ${map.strength_units??'strength units not supplied'}`:'Solid: learns · dashed: fixed',18,24);
  canvas.setAttribute('aria-label',`Connectivity: ${nodes.length} ${map.kind} and ${map.edges.length} connections. `+nodes.map(n=>`${prefix}${n.id} ${n.rate===null?'rate unavailable':n.rate.toFixed(1)+' Hz'}`).join('; '));
 }
-export function drawPerformance(canvas,records){
+function survivalStep(maximum){
+ const rough=(maximum||1)/5,power=10**Math.floor(Math.log10(rough));
+ return ([1,2,5,10].find(step=>step>=rough/power)??10)*power;
+}
+
+export function drawPerformance(canvas,records,{selectedId,clearFloor=0}={}){
  const c=surface(canvas),groups=performanceSeries(records);
- if(!groups.length){canvas.setAttribute('aria-label','No performance observations. Start a run or select recorded trials.');label(c,'Start a run to see survival and obstacle clears by trial.',22,40);return}
- const all=groups.flatMap(g=>g.points),maxX=Math.max(2,...all.map(p=>p.trial));
+ if(!groups.length){canvas.setAttribute('aria-label','No performance observations. Start a run or select recorded trials.');label(c,'Start a run to see survival and obstacle clears by trial.',22,40);return []}
+ const all=groups.flatMap(g=>g.points);
+ const duplicates=groups.length===1&&new Set(all.map(p=>p.trial)).size!==all.length;
+ const order=duplicates?new Map(all.map((point,index)=>[point,index+1])):null;
+ const maxX=duplicates?all.length:Math.max(1,...all.map(p=>p.trial));
  const left=58,right=canvas.width-24,plotWidth=right-left;
+ const panelHeight=(canvas.height-52)/2,plotHeight=panelHeight-49,targets=[];
+ const xFor=trial=>maxX===1?(left+right)/2:left+(trial-1)/(maxX-1)*plotWidth;
+ const xPoint=p=>xFor(order?.get(p)??p.trial);
+ const trialStep=Math.max(1,Math.ceil(maxX/10));
+ const trialTicks=[1];
+ for(let trial=trialStep;trial<maxX;trial+=trialStep){
+  const x=xFor(trial);
+  if(x-xFor(trialTicks.at(-1))>=32&&xFor(maxX)-x>=32)trialTicks.push(trial);
+ }
+ if(maxX>1)trialTicks.push(maxX);
  for(const [panel,key,title]of [[0,'seconds','Survival (s)'],[1,'clears','Obstacles cleared']]){
-  const top=40+panel*165,bottom=top+110,maxY=Math.max(1,...all.map(p=>p[key]));
+  const top=42+panel*panelHeight,bottom=top+plotHeight;
+  const maxValue=Math.max(key==='clears'?Math.max(1,clearFloor):0,...all.map(p=>p[key]));
+  const step=key==='clears'?Math.max(1,Math.ceil(maxValue/Math.max(1,Math.floor(plotHeight/17)))):survivalStep(maxValue);
+  const intervals=Math.max(1,Math.ceil((maxValue||1)/step));
+  const maxY=step*intervals,yFor=value=>bottom-value/maxY*plotHeight;
   label(c,title,14,top-14);c.strokeStyle='#e2e8f0';c.lineWidth=1;
-  for(let i=0;i<=2;i++){const y=bottom-i*55;c.beginPath();c.moveTo(left,y);c.lineTo(right,y);c.stroke();label(c,(maxY*i/2).toFixed(1),8,y+4)}
+  for(let i=0;i<=intervals;i++){const y=yFor(step*i);c.beginPath();c.moveTo(left,y);c.lineTo(right,y);c.stroke();label(c,String(Number((step*i).toPrecision(6))),8,y+4)}
   for(const [gi,g]of groups.entries()){
    c.strokeStyle=colors[gi%colors.length];c.lineWidth=1.5;c.setLineDash(gi%2?[5,3]:[]);c.beginPath();
-   g.points.forEach((p,i)=>{const x=left+(p.trial-1)/(maxX-1)*plotWidth,y=bottom-p[key]/maxY*110;i?c.lineTo(x,y):c.moveTo(x,y)});c.stroke();c.setLineDash([]);
-   for(const p of g.points){const x=left+(p.trial-1)/(maxX-1)*plotWidth,y=bottom-p[key]/maxY*110;c.fillStyle=colors[gi%colors.length];c.strokeStyle=c.fillStyle;
-    if(p.capped)c.fillRect(x-3,y-3,6,6);else{c.beginPath();c.arc(x,y,3,0,Math.PI*2);p.open?c.stroke():c.fill()}
+   g.points.forEach((p,i)=>{const x=xPoint(p),y=yFor(p[key]);i?c.lineTo(x,y):c.moveTo(x,y)});c.stroke();c.setLineDash([]);
+   for(const p of g.points){const x=xPoint(p),y=yFor(p[key]);c.fillStyle=colors[gi%colors.length];c.strokeStyle=c.fillStyle;
+    if(p.capped)c.fillRect(x-4,y-4,8,8);else{c.beginPath();c.arc(x,y,4,0,Math.PI*2);p.open?c.stroke():c.fill()}
+    if(p.id!=null)targets.push({id:p.id,x,y});
+    if(p.id!=null&&p.id===selectedId){c.beginPath();c.arc(x,y,9,0,Math.PI*2);c.strokeStyle='#172b43';c.lineWidth=2;c.stroke()}
    }
   }
-  label(c,'1',left,bottom+18);label(c,`${maxX}  Trial`,right-70,bottom+18);
+  c.textAlign='center';
+  for(const trial of trialTicks)label(c,String(trial),xFor(trial),bottom+18);
+  c.textAlign='end';label(c,duplicates?'Trial order':'Trial',right,bottom+33);c.textAlign='start';
  }
  label(c,`${groups.length} session${groups.length===1?'':'s'} · square: capped · hollow: active`,14,canvas.height-12);
- canvas.setAttribute('aria-label',`Learning performance: ${all.length} trials across ${groups.length} sessions. Latest survival ${all.at(-1).seconds.toFixed(2)} seconds, ${all.at(-1).clears} clears. Squares mark duration caps.`);
+ canvas.setAttribute('aria-label',`Learning performance: ${all.length} trials across ${groups.length} sessions. Latest survival ${all.at(-1).seconds.toFixed(2)} seconds, ${all.at(-1).clears} clears. Squares mark duration caps.${duplicates?' Repeated trial numbers are shown in plotted order.':''}`);
+ return targets;
+}
+
+export function drawTrialFeedback(canvas,{seconds,events}){
+ const c=surface(canvas);
+ if(!events.length){
+  label(c,'No timed rewards or unneeded jumps recorded for this trial.',22,40);
+  canvas.setAttribute('aria-label','No timed rewards or unneeded jumps recorded for this trial.');
+  return;
+ }
+ const left=142,right=canvas.width-38;
+ const xFor=time=>left+(right-left)*time/(seconds||1);
+ const yFor=kind=>kind==='reward'?49:98;
+ for(const [kind,title] of [['reward','Reward'],['unneeded','Unneeded jump']]){
+  const y=yFor(kind);label(c,title,14,y+4);
+  c.strokeStyle='#e2e8f0';c.beginPath();c.moveTo(left,y);c.lineTo(right,y);c.stroke();
+ }
+ const ticks=seconds>0?4:0;
+ c.textAlign='center';
+ for(let i=0;i<=ticks;i++){
+  const time=seconds*i/(ticks||1),x=xFor(time);
+  c.strokeStyle='#d9e1e8';c.beginPath();c.moveTo(x,25);c.lineTo(x,120);c.stroke();
+  label(c,`${+(time.toFixed(2))} s`,x,145);
+ }
+ for(const event of events){
+  const x=xFor(event.seconds),y=yFor(event.kind);
+  c.fillStyle=event.kind==='reward'?'#246b50':'#9a4c24';
+  if(event.duration>0)c.fillRect(x,y-5,xFor(event.seconds+event.duration)-x,10);
+  c.fillRect(x-2,y-9,4,18);
+ }
+ c.textAlign='start';
+ const rewards=events.filter(event=>event.kind==='reward').length;
+ const jumps=events.length-rewards;
+ canvas.setAttribute('aria-label',`Feedback timing across ${seconds.toFixed(2)} seconds. ${rewards} reward${rewards===1?'':'s'} and ${jumps} unneeded jump${jumps===1?'':'s'}. Expand Feedback times for exact timestamps.`);
+}
+
+export function drawElectrodeMap(canvas,matrix,electrodes){
+ const c=surface(canvas),centerX=canvas.width/2,centerY=canvas.height/2;
+ const radiusX=Math.min(canvas.width*.37,canvas.height*.8),radiusY=canvas.height*.34;
+ const positions=Array.from({length:electrodes},(_,index)=>{
+  const angle=index*2*Math.PI/electrodes-Math.PI/2;
+  return [centerX+Math.cos(angle)*radiusX,centerY+Math.sin(angle)*radiusY];
+ });
+ const minimum=.25,links=[];
+ for(const [i,row] of (matrix??[]).entries()){
+  for(let j=i+1;j<electrodes;j++){
+   const value=row[j];
+   if(!Number.isFinite(value)||Math.abs(value)<minimum)continue;
+   c.strokeStyle=value>0?'#175b87':'#9a4c24';
+   c.lineWidth=1+4*Math.abs(value);
+   c.setLineDash(value<0?[6,4]:[]);
+   c.beginPath();c.moveTo(...positions[i]);c.lineTo(...positions[j]);c.stroke();
+   links.push(`E${i+1} with E${j+1}: ${value.toFixed(2)}`);
+  }
+ }
+ c.setLineDash([]);c.lineWidth=1.5;c.textAlign='center';
+ for(const [index,[x,y]] of positions.entries()){
+  c.beginPath();c.arc(x,y,20,0,2*Math.PI);
+  c.fillStyle='#f2f7fa';c.fill();c.strokeStyle='#536273';c.stroke();
+  label(c,`E${index+1}`,x,y+4);
+ }
+ c.textAlign='start';
+ const possible=electrodes*(electrodes-1)/2;
+ const description=matrix
+  ?`${links.length} of ${possible} pairs shown at |r| ≥ ${minimum}. Solid lines are positive and dashed lines are negative. Correlations come from 100 ms training bins.`
+  :'Training profile correlations unavailable.';
+ canvas.setAttribute('aria-label',`Electrode co-activity map. ${electrodes} electrodes. Zero modeled synapses. ${description} ${links.join('; ')}`);
+ return `${electrodes} electrodes · 0 modeled synapses. ${description}`;
+}
+
+export function drawElectrodeCoactivity(canvas,matrix,electrodes){
+ const c=surface(canvas),cell=Math.floor((canvas.height-56)/electrodes);
+ const left=(canvas.width-cell*electrodes)/2,top=42,pairs=[];
+ c.textAlign='center';
+ for(let i=0;i<electrodes;i++){
+  label(c,`E${i+1}`,left+(i+.5)*cell,top-12);
+  label(c,`E${i+1}`,left-18,top+(i+.5)*cell+4);
+  for(let j=0;j<electrodes;j++){
+   const value=matrix?.[i][j]??null,x=left+j*cell,y=top+i*cell;
+   c.fillStyle=value===null?'#eef1f4':value<0?`rgba(154,76,36,${.08+.35*Math.abs(value)})`:`rgba(24,93,130,${.08+.35*value})`;
+   c.fillRect(x,y,cell-1,cell-1);
+   label(c,value===null?'—':value.toFixed(2),x+cell/2,y+cell/2+4);
+   if(j>i)pairs.push(`E${i+1} with E${j+1}: ${value===null?'unavailable':value.toFixed(2)}`);
+  }
+ }
+ c.textAlign='start';
+ canvas.setAttribute('aria-label',`Training profile spike-count correlation across ${electrodes} electrodes. Zero modeled synapses. ${matrix?pairs.join('; '):'Profile correlations unavailable.'}`);
 }
 export function drawWeights(canvas,record,title='Δ weight (mV) · beginning → current / end'){
  const c=surface(canvas),rows=weightChanges(record);

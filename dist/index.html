@@ -3,12 +3,18 @@
 <header><h1>NeuroRunner</h1><span class="badge">Simulation</span><span id="status" role="status">Ready</span></header>
 <main><nav class="view-buttons" aria-label="Views"><button id="showGame" aria-pressed="true" aria-controls="gameView">Run</button><button id="showPerformance" aria-pressed="false" aria-controls="performanceView">Data</button></nav>
 <p id="activeResearch" role="status"></p>
-<section id="gameView"><div class="panel-head"><h2>Run</h2><label>Control <select id="mode"><option value="neural">Simulation</option><option value="manual">Manual</option><option value="bridge" disabled>Organoid · offline</option></select></label></div>
+<section id="gameView"><div class="panel-head"><h2>Run</h2><label>Control <select id="mode"><option value="neural">Simulation</option><option value="manual">Manual</option><option value="bridge" disabled>Organoid · offline</option></select></label><label id="simulationSourceLabel">Simulation source <select id="simulationSource" aria-describedby="sourceNote"><option value="lif">Learning network</option><option value="finalspark">FinalSpark-trained</option></select></label></div>
+<p id="sourceNote" class="model-note" hidden>Spontaneous simulated electrode activity drives jumps. The game scores those jumps independently of the model.</p>
 <div class="game-wrap"><canvas id="game" width="1000" height="300" role="img" aria-label="A ball jumps over rectangular obstacles"></canvas></div>
 <div class="game-toolbar"><button id="start">Start</button><button id="runTrials">Fast</button><button id="reset">New session</button><button id="step">Step 50 ms</button><button id="viewResults">Data →</button><span id="clock">0.00 s</span></div>
-<small id="phaseStatus" role="status"></small><div class="metrics"><div><small>Clears</small><b id="clears">0</b></div><div><small>Speed</small><b id="speedValue">1.00×</b></div><div><small>Jumps</small><b id="jumps">0</b></div><div><small>Input (Hz)</small><b id="sensoryRate">0 Hz</b></div></div>
+<small id="phaseStatus" role="status"></small><div class="metrics"><div><small>Clears</small><b id="clears">0</b></div><div><small>Speed</small><b id="speedValue">1.00×</b></div><div><small>Jumps</small><b id="jumps">0</b></div><div><small id="rateLabel">Input (Hz)</small><b id="sensoryRate">0 Hz</b></div></div>
 
-<label for="proximity">Proximity <output id="proximityValue">0.00</output></label><progress id="proximity" max="1" value="0" aria-label="Encoded obstacle proximity"></progress>
+<div id="proximityControls"><label for="proximity">Proximity <output id="proximityValue">0.00</output></label><progress id="proximity" max="1" value="0" aria-label="Encoded obstacle proximity"></progress></div>
+<section id="finalSparkNetwork" class="map-section" aria-labelledby="finalSparkNetworkTitle" hidden>
+<h3 id="finalSparkNetworkTitle">Electrode connectivity</h3>
+<p id="finalSparkNetworkNote" class="model-note"></p>
+<div class="chart-scroll"><canvas id="finalSparkNetworkMap" width="800" height="280" role="img" aria-label="FinalSpark electrode connectivity"></canvas></div>
+</section>
 
 
 <details id="runSettings"><summary>Settings</summary><div class="session-setup"><div class="research-form"><label>ID<input id="research_experiment_id" maxlength="80" placeholder="Optional"></label><label>Trials<input id="research_trial_count" type="number" min="1" max="1000" value="10"></label><label>Limit (s)<input id="research_trial_limit_s" type="number" min="1" max="600" step="1" value="60"></label><label>Memory<select id="research_initialization"><option value="continue">Continue</option><option value="fresh">Refresh</option></select></label></div><button id="applyResearch">Apply session</button><p id="researchStatus" role="status"></p><p id="memoryStatus" class="model-note" role="status"></p></div>
@@ -27,9 +33,42 @@
 <div class="table-scroll"><table><thead><tr><th>Connection</th><th>Weight</th><th>Initial</th><th>Δ weight</th><th>Rule</th></tr></thead><tbody id="weightRows"></tbody></table></div></details>
 <details><summary>Training pattern values</summary><div class="table-scroll"><table><thead><tr><th>Training pair</th><th>Estimated play seconds</th><th>Next selection chance</th></tr></thead><tbody id="patternRows"></tbody></table></div></details>
 <h3>Trials</h3><div class="table-scroll"><table><thead><tr><th>Trial</th><th>Clears</th><th>Jumps</th><th>Seconds</th><th>End</th><th>Plasticity</th><th>|Δw| from fresh</th></tr></thead><tbody id="trialRows"></tbody></table></div><small>|Δw|: <span id="weightDrift">0</span> mV</small></section></details><p id="recordingStatus" class="model-note" role="status"></p></section>
-<section id="performanceView" hidden><div class="panel-head"><h2>Data</h2><div class="game-toolbar"><button id="downloadRecordings">All JSON</button><button id="researchTrialsCsv">CSV</button><button id="refreshResearch">Refresh</button></div></div><div class="data-controls"><label>Session<select id="researchSession"></select></label><label>Find session<input id="researchFilter" type="search"></label></div><section class="map-section"><h3>Reward / punishment</h3><canvas id="dataFeedbackMap" width="800" height="360" role="img" aria-label="Recorded feedback counts"></canvas><h3>Speed</h3><canvas id="dataSpeedMap" width="800" height="200" role="img" aria-label="Recorded trial speed"></canvas></section><section class="map-section"><h3>Performance</h3><canvas id="dataPerformanceMap" width="800" height="390" role="img" aria-label="Recorded session performance"></canvas></section><p id="researchDataStatus" role="status"></p><p id="researchDataCount" class="model-note"></p>
+<section id="performanceView" hidden>
+<div class="panel-head"><h2>Data</h2><div class="game-toolbar"><button id="downloadRecordings">All JSON</button><button id="researchTrialsCsv">CSV</button><button id="refreshResearch">Refresh</button></div></div>
+<div class="data-controls"><label>Session<select id="researchSession"></select></label><label>Find session<input id="researchFilter" type="search"></label></div>
+<p id="researchDataStatus" role="status"></p>
+<section class="map-section" aria-labelledby="dataPerformanceTitle">
+<h3 id="dataPerformanceTitle">Performance</h3>
+<p id="performanceHelp" class="model-note">Select a point in either chart or choose a trial below to see its feedback timing.</p>
+<div class="chart-scroll"><canvas id="dataPerformanceMap" width="800" height="550" role="img" aria-label="Recorded session performance" aria-describedby="performanceHelp"></canvas></div>
+<p id="researchDataCount" class="model-note"></p>
+</section>
+<section id="trialFeedback" class="map-section" aria-labelledby="trialFeedbackTitle">
+<h3 id="trialFeedbackTitle">Trial feedback</h3>
+<label>Trial<select id="recordSelect"></select></label><p id="recordInfo" role="status"></p>
+<div class="chart-scroll"><canvas id="trialFeedbackMap" width="800" height="165" role="img" aria-label="Reward and unneeded-jump timing"></canvas></div>
+<details id="trialFeedbackTimes"><summary>Feedback times</summary>
+<div class="table-scroll"><table><thead><tr><th>Time in trial</th><th>Feedback</th><th>Duration</th></tr></thead><tbody id="trialFeedbackRows"></tbody></table></div>
+</details>
+</section>
+<section class="map-section">
+<h3 id="dataConnectivityTitle">Connections</h3>
+<p id="dataConnectivityNote" class="model-note" hidden></p>
+<div class="chart-scroll"><canvas id="dataConnectivityMap" width="800" height="340" role="img" aria-label="Selected trial connectivity"></canvas></div>
+<details id="dataCorrelationDetails" hidden><summary>Correlation values</summary>
+<div class="chart-scroll"><canvas id="dataCoactivityMatrix" width="800" height="340" role="img" aria-label="Training profile correlation matrix"></canvas></div>
+</details>
+<div id="dataWeightCharts"><h3>Weight changes</h3><label>Connection<select id="dataWeightConnection"></select></label>
+<canvas id="dataWeightHistoryMap" width="800" height="230" role="img" aria-label="Recorded weight samples"></canvas>
+<canvas id="dataWeightMap" width="800" height="370" role="img" aria-label="Selected trial beginning and end weight changes"></canvas></div>
+</section>
+<details id="dataWeightDetails"><summary>Weights</summary><label>Neuron<select id="recordNeuron"></select></label><div class="table-scroll"><table><thead><tr><th>From</th><th>To</th><th>Beginning (mV)</th><th>End</th><th>Δ weight (mV)</th></tr></thead><tbody id="recordWeights"></tbody></table></div></details>
+<details><summary>Activity</summary><p id="activityWarnings" class="model-note"></p><div class="table-scroll"><table><thead><tr><th>Neuron / electrode</th><th>Spikes</th><th>Rate (Hz)</th></tr></thead><tbody id="recordChannels"></tbody></table></div></details>
+<details><summary>Bins</summary><label>Channel<select id="recordChannel"></select></label><div class="table-scroll"><table><thead><tr><th>Session time (ms)</th><th>Phase</th><th>Bin (ms)</th><th>Spikes</th></tr></thead><tbody id="recordBins"></tbody></table></div></details>
+<details><summary>Trials</summary><div class="table-scroll"><table><thead><tr><th>Trial</th><th>Seconds</th><th>Speed</th><th>Clears</th><th>Jumps</th><th>End</th><th>Settings changed</th></tr></thead><tbody id="researchRows"></tbody></table></div></details>
 <details><summary>Sessions</summary><div class="table-scroll"><table><thead><tr><th>Experiment</th><th>Session</th><th>Closed trials</th><th>Open trials</th><th>Mean seconds</th><th>Mean clears</th><th>Mean jumps</th><th>Settings changed</th></tr></thead><tbody id="sessionRows"></tbody></table></div></details>
-<h3>Trials</h3><div class="table-scroll"><table><thead><tr><th>Trial</th><th>Seconds</th><th>Speed</th><th>Clears</th><th>Jumps</th><th>End</th><th>Settings changed</th></tr></thead><tbody id="researchRows"></tbody></table></div>
-<h3>Trial</h3><label>Trial<select id="recordSelect"></select></label><p id="recordInfo"></p><section class="map-section"><h3>Connections</h3><canvas id="dataConnectivityMap" width="800" height="340" role="img" aria-label="Selected trial connectivity"></canvas><h3>Weight changes</h3><label>Connection<select id="dataWeightConnection"></select></label><canvas id="dataWeightHistoryMap" width="800" height="230" role="img" aria-label="Recorded weight samples"></canvas><canvas id="dataWeightMap" width="800" height="370" role="img" aria-label="Selected trial beginning and end weight changes"></canvas></section><details><summary>Weights</summary><label>Neuron<select id="recordNeuron"></select></label><div class="table-scroll"><table><thead><tr><th>From</th><th>To</th><th>Beginning (mV)</th><th>End (mV)</th><th>Δ weight (mV)</th></tr></thead><tbody id="recordWeights"></tbody></table></div></details><details><summary>Activity</summary><div class="table-scroll"><table><thead><tr><th>Neuron / electrode</th><th>Spikes</th><th>Rate (Hz)</th></tr></thead><tbody id="recordChannels"></tbody></table></div></details><details><summary>Bins</summary><label>Channel<select id="recordChannel"></select></label><div class="table-scroll"><table><thead><tr><th>Session time (ms)</th><th>Phase</th><th>Bin (ms)</th><th>Spikes</th></tr></thead><tbody id="recordBins"></tbody></table></div></details></section>
+<details><summary>Session feedback totals</summary><canvas id="dataFeedbackMap" width="800" height="360" role="img" aria-label="Recorded feedback counts"></canvas></details>
+<details><summary>Trial speed</summary><canvas id="dataSpeedMap" width="800" height="200" role="img" aria-label="Recorded trial speed"></canvas></details>
+</section>
 
 </main><div id="notice" role="status" aria-live="polite"></div><script type="module" src="app.js"></script></body></html>

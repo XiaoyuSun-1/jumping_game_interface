@@ -73,6 +73,28 @@ export function neuralSummary(record){
  return {kind:cells?'cells':'electrodes',duration_ms:duration,channels:totals.map((spikes,id)=>({id,spikes,rate_hz:spikes/(duration/1000)})),warnings};
 }
 
+export function trialFeedbackTimeline(record){
+ const game=record?.result??record?.game_current;
+ const seconds=Number.isFinite(game?.time_s)?Math.max(0,game.time_s):0;
+ const events=new Map();
+ for(const packet of record?.events??[]){
+  const p=packet.payload??{};
+  const phase=packet.type==='phase',feedback=packet.type==='feedback';
+  const emptyJump=packet.type==='outcome'&&p.outcome==='empty jump';
+  const reward=(phase&&p.phase==='reward')||(feedback&&p.outcome==='reward');
+  const punishment=(phase&&p.phase==='punishment')||(feedback&&p.outcome==='empty jump');
+  if(!reward&&!punishment&&!emptyJump)continue;
+  if(!Number.isFinite(packet.t_ms)||packet.t_ms<0||packet.t_ms>seconds*1000+.5)continue;
+  const kind=reward?'reward':'unneeded',time=Math.min(seconds,packet.t_ms/1000);
+  const key=kind+':'+packet.t_ms,previous=events.get(key);
+  const duration=Number.isFinite(p.duration_ms)&&!emptyJump
+   ?Math.max(0,Math.min(seconds-time,p.duration_ms/1000))
+   :previous?.duration??0;
+  events.set(key,{kind,seconds:time,duration,punished:punishment||previous?.punished===true||emptyJump&&p.punished===true});
+ }
+ return {seconds,events:[...events.values()].sort((a,b)=>a.seconds-b.seconds)};
+}
+
 export function connectionChanges(record){
  const start=record.network_start?.synapses??[],end=record.network_end?.synapses;
  if(!end)return start.map(s=>({from:s.from,to:s.to,beginning:s.weight,end:null,delta:null}));

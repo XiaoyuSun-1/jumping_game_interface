@@ -1,0 +1,399 @@
+{
+  "source": "https://doi.org/10.5281/zenodo.22755004",
+  "archive": "Indiv_organoids.zip",
+  "archive_md5": "0ca4215ca670bfcd7d66eb7da378fac9",
+  "archive_sha256": "49976511c5240091ad5af9390ff6c131b56e6c20ea128affb9f93cf28bbd6ad5",
+  "numpy_version": "2.3.5",
+  "bin_seconds": 0.1,
+  "state_edges": [
+    1,
+    2,
+    4,
+    8
+  ],
+  "split_seed": 42,
+  "training_groups": [
+    363,
+    367,
+    371,
+    373,
+    375,
+    379,
+    396,
+    406,
+    433,
+    509,
+    524
+  ],
+  "holdout_groups": [
+    380,
+    417,
+    419,
+    426,
+    535
+  ],
+  "evaluation_seed": 2026,
+  "repeats_per_holdout_recording": 16,
+  "recordings": {
+    "fs363-org0": {
+      "group": 363,
+      "split": "train",
+      "duration_s": 400.0,
+      "spikes": 4217
+    },
+    "fs363-org1": {
+      "group": 363,
+      "split": "train",
+      "duration_s": 600.0,
+      "spikes": 9876
+    },
+    "fs363-org2": {
+      "group": 363,
+      "split": "train",
+      "duration_s": 600.0,
+      "spikes": 4712
+    },
+    "fs363-org3": {
+      "group": 363,
+      "split": "train",
+      "duration_s": 600.0,
+      "spikes": 4386
+    },
+    "fs367-org0": {
+      "group": 367,
+      "split": "train",
+      "duration_s": 600.0,
+      "spikes": 4681
+    },
+    "fs367-org1": {
+      "group": 367,
+      "split": "train",
+      "duration_s": 600.0,
+      "spikes": 4697
+    },
+    "fs367-org2": {
+      "group": 367,
+      "split": "train",
+      "duration_s": 600.0,
+      "spikes": 3044
+    },
+    "fs367-org3": {
+      "group": 367,
+      "split": "train",
+      "duration_s": 600.0,
+      "spikes": 852
+    },
+    "fs371-org0": {
+      "group": 371,
+      "split": "train",
+      "duration_s": 1200.0,
+      "spikes": 4705
+    },
+    "fs371-org1": {
+      "group": 371,
+      "split": "train",
+      "duration_s": 600.0,
+      "spikes": 6046
+    },
+    "fs371-org2": {
+      "group": 371,
+      "split": "train",
+      "duration_s": 600.0,
+      "spikes": 1779
+    },
+    "fs371-org3": {
+      "group": 371,
+      "split": "train",
+      "duration_s": 600.0,
+      "spikes": 6184
+    },
+    "fs373-org0": {
+      "group": 373,
+      "split": "train",
+      "duration_s": 600.0,
+      "spikes": 12173
+    },
+    "fs373-org1": {
+      "group": 373,
+      "split": "train",
+      "duration_s": 600.0,
+      "spikes": 4082
+    },
+    "fs373-org2": {
+      "group": 373,
+      "split": "train",
+      "duration_s": 600.0,
+      "spikes": 3933
+    },
+    "fs373-org3": {
+      "group": 373,
+      "split": "train",
+      "duration_s": 600.0,
+      "spikes": 15003
+    },
+    "fs375-org1": {
+      "group": 375,
+      "split": "train",
+      "duration_s": 600.0,
+      "spikes": 7053
+    },
+    "fs375-org2": {
+      "group": 375,
+      "split": "train",
+      "duration_s": 600.0,
+      "spikes": 4706
+    },
+    "fs375-org3": {
+      "group": 375,
+      "split": "train",
+      "duration_s": 600.0,
+      "spikes": 2832
+    },
+    "fs379-org0": {
+      "group": 379,
+      "split": "train",
+      "duration_s": 1800.0,
+      "spikes": 21770
+    },
+    "fs379-org1": {
+      "group": 379,
+      "split": "train",
+      "duration_s": 1800.0,
+      "spikes": 23908
+    },
+    "fs379-org2": {
+      "group": 379,
+      "split": "train",
+      "duration_s": 1800.0,
+      "spikes": 19296
+    },
+    "fs379-org3": {
+      "group": 379,
+      "split": "train",
+      "duration_s": 1800.0,
+      "spikes": 22263
+    },
+    "fs380-org0": {
+      "group": 380,
+      "split": "holdout",
+      "duration_s": 1800.0,
+      "spikes": 28199
+    },
+    "fs380-org1": {
+      "group": 380,
+      "split": "holdout",
+      "duration_s": 200.0,
+      "spikes": 2243
+    },
+    "fs380-org2": {
+      "group": 380,
+      "split": "holdout",
+      "duration_s": 1800.0,
+      "spikes": 32441
+    },
+    "fs396-org0": {
+      "group": 396,
+      "split": "train",
+      "duration_s": 1800.0,
+      "spikes": 30222
+    },
+    "fs396-org1": {
+      "group": 396,
+      "split": "train",
+      "duration_s": 1800.0,
+      "spikes": 43678
+    },
+    "fs396-org2": {
+      "group": 396,
+      "split": "train",
+      "duration_s": 1800.0,
+      "spikes": 58707
+    },
+    "fs406-org0": {
+      "group": 406,
+      "split": "train",
+      "duration_s": 1800.0,
+      "spikes": 42818
+    },
+    "fs406-org2": {
+      "group": 406,
+      "split": "train",
+      "duration_s": 1000.0,
+      "spikes": 34885
+    },
+    "fs406-org3": {
+      "group": 406,
+      "split": "train",
+      "duration_s": 1800.0,
+      "spikes": 14983
+    },
+    "fs417-org0": {
+      "group": 417,
+      "split": "holdout",
+      "duration_s": 1800.0,
+      "spikes": 33096
+    },
+    "fs417-org1": {
+      "group": 417,
+      "split": "holdout",
+      "duration_s": 1800.0,
+      "spikes": 15620
+    },
+    "fs417-org2": {
+      "group": 417,
+      "split": "holdout",
+      "duration_s": 1800.0,
+      "spikes": 21000
+    },
+    "fs419-org0": {
+      "group": 419,
+      "split": "holdout",
+      "duration_s": 1800.0,
+      "spikes": 49443
+    },
+    "fs419-org1": {
+      "group": 419,
+      "split": "holdout",
+      "duration_s": 3600.0,
+      "spikes": 29849
+    },
+    "fs419-org2": {
+      "group": 419,
+      "split": "holdout",
+      "duration_s": 1800.0,
+      "spikes": 29522
+    },
+    "fs426-org0": {
+      "group": 426,
+      "split": "holdout",
+      "duration_s": 1800.0,
+      "spikes": 11049
+    },
+    "fs426-org1": {
+      "group": 426,
+      "split": "holdout",
+      "duration_s": 1800.0,
+      "spikes": 32891
+    },
+    "fs426-org2": {
+      "group": 426,
+      "split": "holdout",
+      "duration_s": 1800.0,
+      "spikes": 21888
+    },
+    "fs433-org0": {
+      "group": 433,
+      "split": "train",
+      "duration_s": 1800.0,
+      "spikes": 48794
+    },
+    "fs509-org3": {
+      "group": 509,
+      "split": "train",
+      "duration_s": 1800.0,
+      "spikes": 48417
+    },
+    "fs524-org3": {
+      "group": 524,
+      "split": "train",
+      "duration_s": 1800.0,
+      "spikes": 3667
+    },
+    "fs535-org2": {
+      "group": 535,
+      "split": "holdout",
+      "duration_s": 1800.0,
+      "spikes": 31378
+    }
+  },
+  "comparison": {
+    "spikes_per_second": {
+      "medians": {
+        "holdout": 15.666111111111112,
+        "markov": 10.373888888888889,
+        "independent": 10.282777777777778
+      },
+      "distance_to_holdout": {
+        "markov": 4.52245592948718,
+        "independent": 4.571729433760684
+      }
+    },
+    "silent_bin_fraction": {
+      "medians": {
+        "holdout": 0.39861111111111114,
+        "markov": 0.6449722222222223,
+        "independent": 0.6435833333333334
+      },
+      "distance_to_holdout": {
+        "markov": 0.1793173076923077,
+        "independent": 0.17957665598290598
+      }
+    },
+    "multi_electrode_fraction": {
+      "medians": {
+        "holdout": 0.19677777777777777,
+        "markov": 0.086,
+        "independent": 0.08383333333333333
+      },
+      "distance_to_holdout": {
+        "markov": 0.09009014423076922,
+        "independent": 0.09046968482905983
+      }
+    },
+    "high_activity_fraction": {
+      "medians": {
+        "holdout": 0.007388888888888889,
+        "markov": 0.020722222222222222,
+        "independent": 0.017555555555555553
+      },
+      "distance_to_holdout": {
+        "markov": 0.013600961538461541,
+        "independent": 0.013664663461538462
+      }
+    },
+    "fano_100ms": {
+      "medians": {
+        "holdout": 3.0573918128654967,
+        "markov": 13.993142436026197,
+        "independent": 14.607740706401767
+      },
+      "distance_to_holdout": {
+        "markov": 8.338882670222068,
+        "independent": 8.54796704833475
+      }
+    },
+    "fano_1s": {
+      "medians": {
+        "holdout": 12.132397660818715,
+        "markov": 55.702819320143306,
+        "independent": 14.269064197431566
+      },
+      "distance_to_holdout": {
+        "markov": 23.791368710156018,
+        "independent": 26.977262761063663
+      }
+    },
+    "autocorrelation_100ms": {
+      "medians": {
+        "holdout": 0.5954064409139771,
+        "markov": 0.5559246916203753,
+        "independent": -0.0009553994821093193
+      },
+      "distance_to_holdout": {
+        "markov": 0.12535168279647485,
+        "independent": 0.6102412315886637
+      }
+    },
+    "autocorrelation_1s": {
+      "medians": {
+        "holdout": 0.08032994382980613,
+        "markov": 0.06086817548543769,
+        "independent": -0.001979332646219123
+      },
+      "distance_to_holdout": {
+        "markov": 0.030660574059395186,
+        "independent": 0.09995409797870458
+      }
+    }
+  }
+}
